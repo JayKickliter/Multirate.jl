@@ -9,27 +9,27 @@ if !isinteractive()
             $(esc(ex))
         end
     end
-    
+
     macro printf( args... )
     end
 end
 
 function areApprox( x1::Vector, x2::Vector )
     Nx1 = length( x1 )
-    Nx2 = length( x2 )    
-    
+    Nx2 = length( x2 )
+
     if Nx1 != Nx2
         # @printf("x1 & x2 are different lengths vectors")
         return false
     end
-    
+
     for i = 1:Nx1
         if !isapprox( x1[i], x2[i] )
             # @printf( "Something went wrong at index $i" )
             return false
         end
     end
-    
+
     return true
 end
 
@@ -123,7 +123,7 @@ function test_decimation( h, x, decimation )
 
     @printf( "\n\tMultirate.filt( h, x, 1//%d)\n\t\t", decimation )
     @time statelesResult = Multirate.filt( h, x, 1//decimation )
-    
+
     @printf( "\n\tMultirate.filt decimation. length( x1 ) = %d, length( x2 ) = %d\n\t\t", length( x1 ), length( x2 ) )
     self = Multirate.FIRFilter( h, 1//decimation )
     @time begin
@@ -196,7 +196,7 @@ function test_interpolation( h, x, interpolation )
 
     @printf( "\n\tMultirate.filt( h, x, %d//1 )\n\t\t", interpolation )
     @time statelesResult = Multirate.filt( h, x, interpolation//1 )
-    
+
     @printf( "\n\tMultirate.filt interpolation. length( x1 ) = %d, length( x2 ) = %d\n\t\t", length( x1 ), length( x2 ) )
     self = Multirate.FIRFilter( h, interpolation//1 )
     @time begin
@@ -325,15 +325,15 @@ function test_all()
         if ratio == 1
             @test test_singlerate( h, x )
         end
-        
+
         if decimation != 1
             @test test_decimation( h, x, decimation )
         end
-        
+
         if interpolation != 1
             @test test_interpolation( h, x, interpolation )
         end
-        
+
 
         if num(ratio) != 1 && den(ratio) != 1
             @test test_rational( h, x, ratio )
