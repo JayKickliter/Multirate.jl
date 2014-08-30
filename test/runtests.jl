@@ -226,17 +226,17 @@ function test_rational( h, x, ratio )
         baseResult = Base.filt( h, one(eltype(h)), xStuffed );
         baseResult = [ baseResult[n] for n = 1:downfactor:length( baseResult ) ]
     end
-    
+
     if method_exists( DSP.firfilt, ( typeof(h), typeof(x) ))
         @printf( "\n\tNaive rational resampling DSP.firfilt\n\t\t")
         @time begin
             xStuffed  = zeros( resultType, length(x) * upfactor )
             dspResult = Array( resultType, int( ceil( length(x) * ratio )))
-        
+
             for n = 0:length(x)-1;
                 xStuffed[ n*upfactor+1 ] = x[ n+1 ]
             end
-        
+
             dspResult = DSP.firfilt( h, xStuffed );
             dspResult = [ dspResult[n] for n = 1:downfactor:length( dspResult ) ]
         end
@@ -282,7 +282,7 @@ function test_all()
             decimation in 1:16,
                 Th in [Float32, Float64],
                     Tx in [Float32, Float64, Complex64, Complex128]
-        
+
         h    = rand(Th, rand(16:128,1)[1] )
         xLen = int(rand( 1000:2000, 1 )[1])
         xLen = xLen-mod( xLen, decimation )
@@ -300,22 +300,7 @@ function test_all()
     end
 end
 
-
-
-
-function test_speed()
-    ratio     = 29//27
-    xLen      = int(1e6)
-    xLen      = xLen - mod( xLen, den(ratio) )
-    x         = rand( Float32, xLen )
-    h         = rand( Float32, 56 )
-    @test test_rational( h, x, ratio )
-end
-
-
-
-
-function test_phasenext()
+function test_nextphase()
     for interpolation in 1:8
         for decimation in 1:8
             ratio           = interpolation//decimation
@@ -332,9 +317,5 @@ function test_phasenext()
     end
 end
 
-
-# debug_test()
-# run_tests()
-# test_phasenext()
-# test_speed()
+test_nextphase()
 test_all()
