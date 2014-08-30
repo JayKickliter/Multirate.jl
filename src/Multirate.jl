@@ -4,10 +4,7 @@ import Base: filt, filt!, reset
 
 export  FIRFilter,      polyize,
         filt!,          filt,
-        decimate!,      decimate,
-        interpolate!,   interpolate,
-        resample!,      resample,
-        reset
+        reset,          outputlength
 
 #==============================================================================#
 #                                    Types                                     #
@@ -484,5 +481,16 @@ end
 
 
 
+
+#==============================================================================#
+#       ____ ___ ____ ___ ____ _    ____ ____ ____    ____ _ _    ___          #
+#       [__   |  |__|  |  |___ |    |___ [__  [__     |___ | |     |           #
+#       ___]  |  |  |  |  |___ |___ |___ ___] ___]    |    | |___  |           #
+#==============================================================================#
+
+function filt( h::Vector, x::Vector, ratio::Rational = 1//1 )
+    self = FIRFilter( h, ratio )
+    filt( self, x )
+end
 
 end # module
