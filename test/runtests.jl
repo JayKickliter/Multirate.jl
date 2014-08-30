@@ -2,6 +2,14 @@ using Base.Test
 import Multirate
 import DSP
 
+if !isinteractive()
+    macro time( ex )
+        quote
+            $(esc(ex))
+        end
+    end
+end
+
 function areApprox( x1::Vector, x2::Vector )
     Nx1 = length( x1 )
     Nx2 = length( x2 )    
