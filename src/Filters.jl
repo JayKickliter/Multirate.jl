@@ -155,6 +155,25 @@ function outputlength( inputlength::Integer, ratio::Rational, initialφ::Integer
     iceil(  outLen  )
 end
 
+function outputlength( self::FIRFilter{FIRStandard}, inputlength::Integer )
+    inputlength
+end
+
+function outputlength( self::FIRFilter{FIRInterpolator}, inputlength::Integer )
+    kernel = self.kernel
+    kernel.interpolation * inputlength
+end
+
+function outputlength( self::FIRFilter{FIRRational}, inputlength::Integer )
+    kernel = self.kernel
+    outputlength( inputlength-kernel.inputDeficit+1, 1//kernel.decimation, 1 )
+end
+
+function outputlength( self::FIRFilter{FIRRational}, inputlength::Integer )
+    kernel = self.kernel
+    outputlength( inputlength-kernel.inputDeficit+1, kernel.ratio, kernel.φIdx )
+end
+
 function inputindex( outputindex::Integer, ratio::Rational )
     ifloor( (outputindex*den(ratio)) / num(ratio) )
 end
