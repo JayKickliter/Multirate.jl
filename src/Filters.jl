@@ -164,7 +164,7 @@ function outputlength( self::FIRFilter{FIRInterpolator}, inputlength::Integer )
     kernel.interpolation * inputlength
 end
 
-function outputlength( self::FIRFilter{FIRRational}, inputlength::Integer )
+function outputlength( self::FIRFilter{FIRDecimator}, inputlength::Integer )
     kernel = self.kernel
     outputlength( inputlength-kernel.inputDeficit+1, 1//kernel.decimation, 1 )
 end
@@ -259,7 +259,7 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRInterpolator}, x::Vecto
     xLen               = length( x )
     bufLen             = length( buffer )
     reqDlyLineLen      = self.reqDlyLineLen
-    outLen             = xLen * interpolation
+    outLen             = outputlength( self, xLen )
     criticalYidx       = min( reqDlyLineLen*interpolation, outLen )
 
     bufLen >= outLen || error( "length( buffer ) must be >= interpolation * length(x)")
@@ -308,8 +308,8 @@ end
 
 function filt( self::FIRFilter{FIRInterpolator}, x::Vector )
     xLen   = length( x )
-    bufLen = xLen * self.kernel.interpolation
-    buffer = similar( x, bufLen )
+    outlen = outputlength( self, xLen )
+    buffer = similar( x, outlen )
     filt!( buffer, self, x )
 end
 
@@ -398,7 +398,7 @@ function filt{T}( self::FIRFilter{FIRRational}, x::Vector{T} )
         return T[]
     end
 
-    outLen = outputlength( xLen-kernel.inputDeficit+1, kernel.ratio, kernel.φIdx )
+    outLen = outputlength( self, xLen )
     buffer = similar( x, outLen )
     filt!( buffer, self, x )
 
@@ -424,7 +424,7 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRDecimator}, x::Vector{T
         return T[]
     end
 
-    outLen = outputlength( xLen-kernel.inputDeficit+1, 1//kernel.decimation, 1 )
+    outLen = outputlength( self, xLen )
 
     h::Vector{T}       = kernel.h
     dlyLine::Vector{T} = self.dlyLine
@@ -483,7 +483,7 @@ function filt{T}( self::FIRFilter{FIRDecimator}, x::Vector{T} )
         return T[]
     end
 
-    outLen = outputlength( xLen-kernel.inputDeficit+1, 1//kernel.decimation, 1 )
+    outLen = outputlength( self, xLen )
     buffer = similar( x, outLen )
     filt!( buffer, self, x )
 
