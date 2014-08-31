@@ -50,22 +50,23 @@ function FIRFilter( h::Vector, resampleRatio::Rational = 1//1 )
     interpolation = num( resampleRatio )
     decimation    = den( resampleRatio )
     reqDlyLineLen = 0
+    h             = interpolation == 1 ? h : h .* interpolation # scale h by interpolation to account for theoretical added zeros. Polyphase filters don't do the math on the zeros, but their affects on gain are still there.
     hLen          = length( h )
 
-    if resampleRatio == 1                                     # single-rate
+    if resampleRatio == 1                                       # single-rate
         reqDlyLineLen = length( h ) - 1
         h             = flipud( h )
         kernel        = FIRStandard( h, hLen )
-    elseif interpolation == 1                                 # decimate
+    elseif interpolation == 1                                   # decimate
         reqDlyLineLen = length( h ) - 1
         h             = flipud( h )
         kernel        = FIRDecimator( h, hLen, decimation, 1 )
-    elseif decimation == 1                                    # interpolate
+    elseif decimation == 1                                      # interpolate
         pfb              = flipud(polyize( h, interpolation ))
         ( tapsPerφ, Nφ ) = size( pfb )
         reqDlyLineLen    = tapsPerφ - 1
         kernel           = FIRInterpolator( pfb, interpolation, Nφ, tapsPerφ )
-    else                                                      # rational
+    else                                                        # rational
         pfb              = flipud(polyize( h, interpolation ))
         ( tapsPerφ, Nφ ) = size( pfb )
         reqDlyLineLen    = tapsPerφ - 1
