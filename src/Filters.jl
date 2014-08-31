@@ -159,11 +159,11 @@ function inputindex( outputindex::Integer, ratio::Rational )
     ifloor( (outputindex*den(ratio)) / num(ratio) )
 end
 
-function nextphase( φCurrent::Integer, ratio::Rational )
+function nextphase( currentphase::Integer, ratio::Rational )
     interpolation = num( ratio )
     decimation    = den( ratio )
     φStep         = mod( decimation, interpolation )
-    φNext         = φCurrent + φStep
+    φNext         = currentphase + φStep
     φNext         = φNext > interpolation ? φNext - interpolation : φNext
 end
 
