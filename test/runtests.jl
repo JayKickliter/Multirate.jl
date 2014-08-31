@@ -180,7 +180,7 @@ function test_interpolation( h, x, interpolation )
         for n = 0:xLen-1;
             xZeroStuffed[ n*interpolation+1 ] = x[ n+1 ]
         end
-        baseResult = Base.filt( h, one(eltype(h)), xZeroStuffed )
+        baseResult = Base.filt( h.*interpolation, one(eltype(h)), xZeroStuffed )
     end
 
     if method_exists( DSP.firfilt, ( typeof(h), typeof(x) ))
@@ -190,7 +190,7 @@ function test_interpolation( h, x, interpolation )
             for n = 0:xLen-1;
                 xZeroStuffed[ n*interpolation+1 ] = x[ n+1 ]
             end
-            dspResult = DSP.firfilt( h, xZeroStuffed )
+            dspResult = DSP.firfilt( h.*interpolation, xZeroStuffed )
         end
     end
 
@@ -216,7 +216,12 @@ function test_interpolation( h, x, interpolation )
     end
     piecewiseResult = [ y1, y2 ]
 
-    areApprox( baseResult, statelesResult ) && areApprox( baseResult, statefulResult ) && areApprox( piecewiseResult, baseResult )
+    if areApprox( baseResult, statelesResult ) && areApprox( baseResult, statefulResult ) && areApprox( piecewiseResult, baseResult )
+        return true
+    end
+
+    display( [ baseResult statefulResult piecewiseResult ] )
+
 end
 
 
@@ -257,7 +262,7 @@ function test_rational( h, x, ratio )
             xStuffed[ n*upfactor+1 ] = x[ n+1 ]
         end
 
-        baseResult = Base.filt( h, one(eltype(h)), xStuffed );
+        baseResult = Base.filt( h.*upfactor, one(eltype(h)), xStuffed );
         baseResult = [ baseResult[n] for n = 1:downfactor:length( baseResult ) ]
     end
 
@@ -271,7 +276,7 @@ function test_rational( h, x, ratio )
                 xStuffed[ n*upfactor+1 ] = x[ n+1 ]
             end
 
-            dspResult = DSP.firfilt( h, xStuffed );
+            dspResult = DSP.firfilt( h.*upfactor, xStuffed );
             dspResult = [ dspResult[n] for n = 1:downfactor:length( dspResult ) ]
         end
     end
