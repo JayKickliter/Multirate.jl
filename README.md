@@ -9,10 +9,10 @@
 Multirate is not registered, you must clone it it:
 
 ```julia
-Pkg.clone("https://github.com/JayKickliter/Multirate.jl.git")
+Pkg.add( "Multirate" )
 ```
 
-Multirate has no dependencies. However, to the run the tests, [DSP](https://github.com/JuliaDSP/DSP.jl.git) must be installed.
+**Multirate** depends on **[DSP](https://github.com/JuliaDSP/DSP.jl)** for [windowing](http://en.wikipedia.org/wiki/Window_function) functions.
 
 # Usage
 
