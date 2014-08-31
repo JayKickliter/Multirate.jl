@@ -4,7 +4,13 @@ import Base: filt, filt!, reset
 
 export  FIRFilter,      polyize,
         filt!,          filt,
-        reset,          outputlength
+        reset,          outputlength,
+        firdes,         kaiserord,
+        hann,           hammming,
+        kaiser,         blackman,
+        firdes
+
+include( "FIRDesign.jl" )
 
 #==============================================================================#
 #                                    Types                                     #
