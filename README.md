@@ -1,4 +1,5 @@
 [![Build Status](https://travis-ci.org/JayKickliter/Multirate.jl.svg?branch=master)](https://travis-ci.org/JayKickliter/Multirate.jl)
+[![CoverageStatus](https://coveralls.io/repos/JayKickliter/Multirate.jl/badge.png)](https://coveralls.io/r/JayKickliter/Multirate.jl)
 
 **Multirate** is a package for the creation and execution of state-preserving FIR filters which perform sample rate changes. The input to output sample-rate ratio can be 1 (no change), 1/M (decimation), L/1 (interpolation), or L/M (rational), where L & M are integers.
 
