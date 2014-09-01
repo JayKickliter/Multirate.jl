@@ -38,7 +38,7 @@ y = filt( h, x, 3//4 )
 
 To use `Multirate`'s streaming filter functionality, you must first create a filter object. Every time you call `filt` with that object, the filtering processes picks up where it left off. This is good for processing large vectors from a file, or filtering an stream of samples with indefinite length.
 
-Each filter object is of type `FIRFilter{Tk<:FIRKernel}`. Thera are four subtypes of `FIRKernel`:
+Each filter object is of type `FIRFilter{Tk<:FIRKernel}`. Ther are four subtypes of `FIRKernel`:
 
 * `FIRStandard`: normal single-rate FIR filter
 * `FIRInterpolator`: resampling with a ratio of `L//1`
