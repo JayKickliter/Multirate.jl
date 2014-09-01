@@ -8,8 +8,7 @@ using DSP.Windows
 export  hanning,
         hammming,
         kaiser,
-        blackman,
-        firdes
+        blackman
 
 include( "FIRDesign.jl" )
 export  firdes,
