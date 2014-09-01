@@ -82,7 +82,14 @@ function test_singlerate( h, x )
     piecewiseResult = [ y1, y2 ]
 
 
-    areApprox( baseResult, statelesResult ) && areApprox( baseResult, statefulResult ) && areApprox( baseResult, piecewiseResult )
+     if areApprox( baseResult, statelesResult ) && areApprox( baseResult, statefulResult ) && areApprox( baseResult, piecewiseResult )
+         return true
+     end
+
+     display( [ baseResult statelesResult statefulResult piecewiseResult ] )
+
+     return false
+
 end
 
 
@@ -180,7 +187,7 @@ function test_interpolation( h, x, interpolation )
         for n = 0:xLen-1;
             xZeroStuffed[ n*interpolation+1 ] = x[ n+1 ]
         end
-        baseResult = Base.filt( h.*interpolation, one(eltype(h)), xZeroStuffed )
+        baseResult = Base.filt( h, one(eltype(h)), xZeroStuffed )
     end
 
     if method_exists( DSP.firfilt, ( typeof(h), typeof(x) ))
@@ -190,7 +197,7 @@ function test_interpolation( h, x, interpolation )
             for n = 0:xLen-1;
                 xZeroStuffed[ n*interpolation+1 ] = x[ n+1 ]
             end
-            dspResult = DSP.firfilt( h.*interpolation, xZeroStuffed )
+            dspResult = DSP.firfilt( h, xZeroStuffed )
         end
     end
 
@@ -262,7 +269,7 @@ function test_rational( h, x, ratio )
             xStuffed[ n*upfactor+1 ] = x[ n+1 ]
         end
 
-        baseResult = Base.filt( h.*upfactor, one(eltype(h)), xStuffed );
+        baseResult = Base.filt( h, one(eltype(h)), xStuffed );
         baseResult = [ baseResult[n] for n = 1:downfactor:length( baseResult ) ]
     end
 
@@ -276,7 +283,7 @@ function test_rational( h, x, ratio )
                 xStuffed[ n*upfactor+1 ] = x[ n+1 ]
             end
 
-            dspResult = DSP.firfilt( h.*upfactor, xStuffed );
+            dspResult = DSP.firfilt( h, xStuffed );
             dspResult = [ dspResult[n] for n = 1:downfactor:length( dspResult ) ]
         end
     end
@@ -294,7 +301,6 @@ function test_rational( h, x, ratio )
 
     @printf( "\n\tMultirate.filt rational. Piecewise for all %d inputs\n\t\t", length( x ) )
     self = Multirate.FIRFilter( h, ratio )
-    # @printf( "pfb = $(self.kernel.pfb)")
     y1 = similar( x, 0 )
     @time begin
         for i in 1:length(x)
@@ -307,7 +313,7 @@ function test_rational( h, x, ratio )
         return true
     end
 
-    display( [  baseResult singlepassResult statefulResult ])
+    display( [  baseResult statefulResult statefulResult piecewiseResult ] )
 
     return false
 end

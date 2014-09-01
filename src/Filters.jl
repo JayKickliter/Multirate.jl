@@ -13,6 +13,13 @@ type FIRStandard <: FIRKernel
     hLen::Int
 end
 
+function FIRStandard( h::Vector )
+    h    = flipud( h )
+    hLen = length( h )
+    FIRStandard( h, hLen )
+end
+
+
 # Interpolator FIR kernel
 type FIRInterpolator <: FIRKernel
     pfb::PFB
@@ -21,6 +28,13 @@ type FIRInterpolator <: FIRKernel
     tapsPerφ::Int
 end
 
+function FIRInterpolator( h::Vector, interpolation::Integer )
+    pfb              = flipud( polyize( h, interpolation ) )
+    ( tapsPerφ, Nφ ) = size( pfb )
+    FIRInterpolator( pfb, interpolation, Nφ, tapsPerφ )
+end
+
+
 # Decimator FIR kernel
 type FIRDecimator <: FIRKernel
     h::Vector
@@ -28,6 +42,13 @@ type FIRDecimator <: FIRKernel
     decimation::Int
     inputDeficit::Int
 end
+
+function FIRDecimator( h::Vector, decimation::Integer )
+    h    = flipud( h )
+    hLen = length( h )
+    FIRDecimator( h, hLen, decimation, 1 )
+end
+
 
 # Rational resampler FIR kernel
 type FIRRational  <: FIRKernel
@@ -40,6 +61,16 @@ type FIRRational  <: FIRKernel
     inputDeficit::Int
 end
 
+function FIRRational( h::Vector, ratio::Rational )
+    interpolation    = num( ratio )
+    pfb              = flipud( polyize( h, interpolation ) )
+    ( tapsPerφ, Nφ ) = size( pfb )
+    criticalYidx     = ifloor( tapsPerφ * ratio )
+    FIRRational( pfb, ratio, Nφ, tapsPerφ, criticalYidx, 1, 1 )
+end
+
+
+# FIRFilter - the kernel does the heavy lifting
 type FIRFilter{Tk<:FIRKernel} <: Filter
     kernel::Tk
     dlyLine::Vector
@@ -50,31 +81,22 @@ function FIRFilter( h::Vector, resampleRatio::Rational = 1//1 )
     interpolation = num( resampleRatio )
     decimation    = den( resampleRatio )
     reqDlyLineLen = 0
-    h             = interpolation == 1 ? h : h .* interpolation # scale h by interpolation to account for theoretical added zeros. Polyphase filters don't do the math on the zeros, but their affects on gain are still there.
-    hLen          = length( h )
 
-    if resampleRatio == 1                                       # single-rate
-        reqDlyLineLen = length( h ) - 1
-        h             = flipud( h )
-        kernel        = FIRStandard( h, hLen )
-    elseif interpolation == 1                                   # decimate
-        reqDlyLineLen = length( h ) - 1
-        h             = flipud( h )
-        kernel        = FIRDecimator( h, hLen, decimation, 1 )
-    elseif decimation == 1                                      # interpolate
-        pfb              = flipud(polyize( h, interpolation ))
-        ( tapsPerφ, Nφ ) = size( pfb )
-        reqDlyLineLen    = tapsPerφ - 1
-        kernel           = FIRInterpolator( pfb, interpolation, Nφ, tapsPerφ )
-    else                                                        # rational
-        pfb              = flipud(polyize( h, interpolation ))
-        ( tapsPerφ, Nφ ) = size( pfb )
-        reqDlyLineLen    = tapsPerφ - 1
-        criticalYidx     = ifloor( tapsPerφ * resampleRatio )
-        kernel           = FIRRational( pfb, resampleRatio, Nφ, tapsPerφ, criticalYidx, 1, 1 )
+    if resampleRatio == 1                                     # single-rate
+        kernel        = FIRStandard( h )
+        reqDlyLineLen = kernel.hLen - 1
+    elseif interpolation == 1                                 # decimate
+        kernel        = FIRDecimator( h, decimation )
+        reqDlyLineLen = kernel.hLen - 1
+    elseif decimation == 1                                    # interpolate
+        kernel        = FIRInterpolator( h, interpolation )
+        reqDlyLineLen = kernel.tapsPerφ - 1
+    else                                                      # rational
+        kernel        = FIRRational( h, resampleRatio )
+        reqDlyLineLen = kernel.tapsPerφ - 1
     end
 
-    dlyLine = zeros( eltype( h ), reqDlyLineLen )
+    dlyLine = zeros( reqDlyLineLen )
 
     FIRFilter( kernel, dlyLine, reqDlyLineLen )
 end
