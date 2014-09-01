@@ -1,7 +1,7 @@
 [![Build Status](https://travis-ci.org/JayKickliter/Multirate.jl.svg?branch=master)](https://travis-ci.org/JayKickliter/Multirate.jl)
 [![CoverageStatus](https://coveralls.io/repos/JayKickliter/Multirate.jl/badge.png)](https://coveralls.io/r/JayKickliter/Multirate.jl)
 
-**Multirate** is a package for the creation and execution of streaming (stateful) FIR filters which can also perform sample rate conversion.
+`Multirate` is a package for the creation and execution of streaming (stateful) FIR filters which can also perform sample rate conversion.
 
 # Installation
 
@@ -9,7 +9,7 @@
 Pkg.add( "Multirate" )
 ```
 
-**Multirate** depends on **[DSP](https://github.com/JuliaDSP/DSP.jl)** for [windowing](http://en.wikipedia.org/wiki/Window_function) functions.
+`Multirate` depends on [`DSP`](https://github.com/JuliaDSP/DSP.jl) for [windowing](http://en.wikipedia.org/wiki/Window_function) functions.
 
 # Usage
 
@@ -36,7 +36,7 @@ y = filt( h, x, 3//4 )
 
 ## Streaming ##
 
-To use **Multirate**'s streaming filter functionality, you must first create a filter object. Every time you call `filt` with that object, the filtering processes picks up where it left off. This is good for processing large vectors from a file, or filtering an stream of samples with indefinite length.
+To use `Multirate`'s streaming filter functionality, you must first create a filter object. Every time you call `filt` with that object, the filtering processes picks up where it left off. This is good for processing large vectors from a file, or filtering an stream of samples with indefinite length.
 
 Each filter object is of type `FIRFilter{Tk<:FIRKernel}`. Thera are four subtypes of `FIRKernel`:
 
