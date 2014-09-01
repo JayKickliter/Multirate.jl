@@ -1,12 +1,10 @@
 [![Build Status](https://travis-ci.org/JayKickliter/Multirate.jl.svg?branch=master)](https://travis-ci.org/JayKickliter/Multirate.jl)
 [![CoverageStatus](https://coveralls.io/repos/JayKickliter/Multirate.jl/badge.png)](https://coveralls.io/r/JayKickliter/Multirate.jl)
 
-**Multirate** is a package for the creation and execution of state-preserving FIR filters which perform sample rate changes. The input to output sample-rate ratio can be 1 (no change), 1/M (decimation), L/1 (interpolation), or L/M (rational), where L & M are integers.
+**Multirate** is a package for the creation and execution of state-preserving FIR filters which perform sample rate changes.
 
 
 # Installation
-
-Multirate is not registered, you must clone it it:
 
 ```julia
 Pkg.add( "Multirate" )
@@ -18,7 +16,7 @@ Pkg.add( "Multirate" )
 
 ## Stateless ##
 
-Use these methods if only want to resample a vector in one chunk.
+Use these methods if you only want to resample a vector in one chunk.
 
 In these examples, `x` and `h` are previously defined signal & filter-taps vectors.
 
@@ -39,11 +37,18 @@ y = filt( h, x, 3//4 )
 
 ## State-preserving ##
 
-To use **Multirate**'s stateful filtering functionality, you must first create a filter object. Every time to call `filt` with that object, the filtering picks up where you left off. This is good for processing large vectors from a file, or filtering an stream of samples with indefinite length.
+To use **Multirate**'s stateful filtering functionality, you must first create a filter object. Every time you call `filt` with that object, the filtering picks up where it left off. This is good for processing large vectors from a file, or filtering an stream of samples with indefinite length.
 
-Each filter object is of type `FIRFilter{Tk<:FIRKernel}`. `Tk` can either be `FIRStandard`, `FIRInterpolator`, `FIRDecimator`, or `FIRRational`. The type of `FIRKernel` created is determined by the value of the ratio you pass to the `FIRFilter` constructor. If you do not pass a ratio, a single-rate `FIRStardard` kernel is created.
+Each filter object is of type `FIRFilter{Tk<:FIRKernel}`. Thera are four subtypes of `FIRKernel`:
 
-In the following example, we will be resampling with a ratio of 3/17. Please note that h in this example is contrived to show you the input to output progressions. It performs no useful signal filtering.
+* `FIRStandard`: normal single-rate FIR filter
+* `FIRInterpolator`: resampling with a ratio of `L//1`
+* `FIRDecimator`: resampling with a ratio of `1//M`
+* `FIRRational`: resampling with a ratio of `L/M`
+
+You do not need to specify the kernel type. It is chosen for you when you based on the resampling ratio you specify when creating a new `FIRFilter` object.
+
+In the following example, we will be resampling with a ratio of `3//17`. Please note that the filter taps `h` in this example is contrived to show you the input to output progressions. It performs no useful signal filtering.
 
 ```jlcon
 julia> x = [ 1.0:100 ]
