@@ -47,7 +47,7 @@ Each filter object is of type `FIRFilter{Tk<:FIRKernel}`. Ther are four subtypes
 
 You do not need to specify the kernel type. It is chosen for you when you based on the resampling ratio you specify when creating a new `FIRFilter` object.
 
-One thing to note is that for decimation and rational resampling, there are instances where where `filt` will return an empty vector. This is because those filters require certain number of inputs to compute an output. If you  call `filt` returns an empty vector it is working normally, and will eventually return processed samples when it receives enough inputs. However, your code should be written in a way that does not assume that the returned vectors are not empty.
+One thing to note is that for decimation and rational resampling, there are instances where `filt` will return an empty vector. This is because those filters require a certain number of inputs to compute an output. If you  call `filt` and it returns an empty vector, it is working normally, and will eventually return processed samples when it receives enough inputs. However, your code should be written in a way that does not assume that the returned vectors are not empty.
 
 In the following example, we will be resampling with a ratio of `3//17`. Please note that the filter taps `h` in this example is contrived to show you the input to output progression. It performs no useful signal filtering.
 
@@ -142,9 +142,9 @@ julia> sum( y .- filt( h, x, 3//17 ) )
 
 The naive approach to resampling is a two to three step process, depending on whether you are decimating, interpolating, or both in case of rational resampling. For a rational factor, the processes look like:
 
-1. Stuff `L-1` zeros between each input sample
+1. Stuff `L-1` zeros between each input sample.
 2. Apply your anti-alias filter. This fills in those zeros from step 1.
-3. Keep one out of `M` samples from step 2, and throw away the rest
+3. Keep one out of `M` samples from step 2, and throw away the rest.
 
 Let's design a naive rational resampler:
 
@@ -190,8 +190,8 @@ julia> @time y = Multirate.filt( resampler, x );
 elapsed time: **0.056938961 seconds** (**7350144** bytes allocated)
 ```
 
-The difference in speed it huge, but not necessarily surprising. Perhaps the most surprising part of this demo is the memory allocation. `naiveresampler` allocated almost 2.4 GB vs `Multirate.filt`'s 7.4 MB.
+The difference in speed is huge, but not necessarily surprising. Perhaps the most surprising part of this demo is the memory allocation. `naiveresampler` allocated almost 2.4 GB vs `Multirate.filt`'s 7.4 MB.
 
-`Multirate` is not heavily optimized numerically speaking, an has much room for improvement, but by using polyphase FIR implementation it is able to only do math on the samples that are kept. It doesn't waste cycles multiplying taps by stuffed zeros, and it does not do any multiplications on samples that are thrown out in the decimation process. Despite this, it produces results identical to the naive approach.
+`Multirate` is not heavily optimized numerically speaking, and has much room for improvement, but by using polyphase FIR implementation it is able to only do math on the samples that are kept. It doesn't waste cycles multiplying taps by stuffed zeros, and it does not do any multiplications on samples that are thrown out in the decimation process. Despite this, it produces results identical to the naive approach.
 
 One way the code is optimized is that the filter-taps/polyphase-filter-banks are flipped in memory. Many filter routines found on the internet use the literal definition of discrete convolution by moving forward in memory through the input samples, and backwards in memory through the filter taps, or vice versa. Having the coefficients flipped is more friendly to the compiler. In some cases the compiler will emit [SIMD](http://en.wikipedia.org/wiki/SIMD) instructions to perform multiple multiplications at a time.
