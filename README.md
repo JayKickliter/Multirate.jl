@@ -171,7 +171,7 @@ sampleRate    = 48000
 interpolation = 147
 decimation    = 160
 ratio         = interpolation//decimation
-numTaps       = 24*interpolation           # this is a lot of taps. For my work typically use less than 60
+numTaps       = 24*interpolation           # that's a lot of taps
 x             = rand( Float32, 1_000_000 )
 h             = Multirate.firdes( numTaps, 0.5/interpolation, Multirate.kaiser, beta = 7.8562  )
 ```
