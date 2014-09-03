@@ -75,13 +75,14 @@ end
 
 function firdes( numtaps::Integer, cutoff::Union(Real, Vector), windowfunction::Function; response::FIRResponse = LOWPASS, samplerate = 1.0, beta = 6.75 )
 
-    cutoff    = cutoff ./ samplerate
-    prototype = firprototype( numtaps, cutoff, response=response )
+    cutoff       = cutoff ./ samplerate
+    prototype    = firprototype( numtaps, cutoff, response=response )
+    prototypeLen = length( prototype )
 
     if windowfunction == kaiser
-        return prototype .* kaiser( numtaps, beta )
+        return prototype .* kaiser( prototypeLen, beta )
     else
-        return prototype .*  windowfunction( numtaps )
+        return prototype .*  windowfunction( prototypeLen )
     end
 
 end
