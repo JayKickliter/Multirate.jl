@@ -25,6 +25,7 @@ export  FIRFilter,
         filt!,
         filt,
         reset,
-        outputlength
+        outputlength,
+        inputlength
 
 end # module
