@@ -197,9 +197,51 @@ function outputlength( self::FIRFilter{FIRRational}, inputlength::Integer )
     outputlength( inputlength-kernel.inputDeficit+1, kernel.ratio, kernel.φIdx )
 end
 
-function inputindex( outputindex::Integer, ratio::Rational )
-    ifloor( (outputindex*den(ratio)) / num(ratio) )
+
+
+
+#==============================================================================#
+#                 _ _  _ ___  _  _ ___    _    ____ _  _                       #
+#                 | |\ | |__] |  |  |     |    |___ |\ |                       #
+#                 | | \| |    |__|  |     |___ |___ | \|                       #
+#==============================================================================#
+
+function inputlength( outputlength::Int, ratio::Rational, initialφ::Integer )
+    interpolation = num( ratio )
+    decimation    = den( ratio )
+    inLen = ( outputlength * decimation + initialφ - 1 ) / interpolation
+    iceil( inLen )
 end
+
+function inputlength( self::FIRFilter{FIRStandard}, outputlength::Integer )
+    outputlength
+end
+
+function inputlength( self::FIRFilter{FIRInterpolator}, outputlength::Integer )
+    kernel = self.kernel
+    inputlength( outputlength, kernel.interpolation//1, 1 )
+end
+
+function inputlength( self::FIRFilter{FIRDecimator}, outputlength::Integer )
+    kernel = self.kernel
+    inLen  = inputlength( outputlength, 1//kernel.decimation, 1 )
+    inLen  = inLen + kernel.inputlength - 1
+end
+
+function inputlength( self::FIRFilter{FIRRational}, outputlength::Integer )
+    kernel = self.kernel
+    inLen = inputlength( outputlength, kernel.ratio, kernel.φIdx )
+    inLen = inLen + kernel.inputDeficit - 1
+end
+
+
+
+
+#==============================================================================#
+#              _  _ ____ _  _ ___    ___  _  _ ____ ____ ____                  #
+#              |\ | |___  \/   |     |__] |__| |__| [__  |___                  #
+#              | \| |___ _/\_  |     |    |  | |  | ___] |___                  #
+#==============================================================================#
 
 function nextphase( currentphase::Integer, ratio::Rational )
     interpolation = num( ratio )
@@ -208,6 +250,9 @@ function nextphase( currentphase::Integer, ratio::Rational )
     φNext         = currentphase + φStep
     φNext         = φNext > interpolation ? φNext - interpolation : φNext
 end
+
+
+
 
 #==============================================================================#
 #               ____ _ _  _ ____ _    ____    ____ ____ ___ ____               #
