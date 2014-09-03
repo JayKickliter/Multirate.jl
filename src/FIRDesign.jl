@@ -77,6 +77,7 @@ function firdes( numtaps::Integer, cutoff::Union(Real, Vector), windowfunction::
 
     cutoff    = cutoff ./ samplerate
     prototype = firprototype( numtaps, cutoff, response=response )
+    numtaps   = length( prototype )
 
     if windowfunction == kaiser
         return prototype .* kaiser( numtaps, beta )
