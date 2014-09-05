@@ -72,6 +72,19 @@ function FIRRational( h::Vector, ratio::Rational )
 end
 
 
+# Arbitrary resampler FIR kernel
+type FIRArbitrary  <: FIRKernel
+    pfb::PFB
+    ratio::Rational{Int}
+    N𝜙::Int
+    tapsPer𝜙::Int
+    criticalYidx::Int
+    𝜙Idx::Int
+    inputDeficit::Int
+    α::Float64
+end
+
+
 # FIRFilter - the kernel does the heavy lifting
 type FIRFilter{Tk<:FIRKernel} <: Filter
     kernel::Tk
