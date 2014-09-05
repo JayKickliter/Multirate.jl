@@ -27,14 +27,14 @@ end
 type FIRInterpolator <: FIRKernel
     pfb::PFB
     interpolation::Int
-    Nφ::Int
-    tapsPerφ::Int
+    NΦ::Int
+    tapsPerΦ::Int
 end
 
 function FIRInterpolator( h::Vector, interpolation::Integer )
     pfb              = flipud( polyize( h, interpolation ) )
-    ( tapsPerφ, Nφ ) = size( pfb )
-    FIRInterpolator( pfb, interpolation, Nφ, tapsPerφ )
+    ( tapsPerΦ, NΦ ) = size( pfb )
+    FIRInterpolator( pfb, interpolation, NΦ, tapsPerΦ )
 end
 
 
@@ -57,19 +57,19 @@ end
 type FIRRational  <: FIRKernel
     pfb::PFB
     ratio::Rational{Int}
-    Nφ::Int
-    tapsPerφ::Int
+    NΦ::Int
+    tapsPerΦ::Int
     criticalYidx::Int
-    φIdx::Int
+    ΦIdx::Int
     inputDeficit::Int
 end
 
 function FIRRational( h::Vector, ratio::Rational )
     interpolation    = num( ratio )
     pfb              = flipud( polyize( h, interpolation ) )
-    ( tapsPerφ, Nφ ) = size( pfb )
-    criticalYidx     = ifloor( tapsPerφ * ratio )
-    FIRRational( pfb, ratio, Nφ, tapsPerφ, criticalYidx, 1, 1 )
+    ( tapsPerΦ, NΦ ) = size( pfb )
+    criticalYidx     = ifloor( tapsPerΦ * ratio )
+    FIRRational( pfb, ratio, NΦ, tapsPerΦ, criticalYidx, 1, 1 )
 end
 
 
@@ -93,10 +93,10 @@ function FIRFilter( h::Vector, resampleRatio::Rational = 1//1 )
         reqDlyLineLen = kernel.hLen - 1
     elseif decimation == 1                                    # interpolate
         kernel        = FIRInterpolator( h, interpolation )
-        reqDlyLineLen = kernel.tapsPerφ - 1
+        reqDlyLineLen = kernel.tapsPerΦ - 1
     else                                                      # rational
         kernel        = FIRRational( h, resampleRatio )
-        reqDlyLineLen = kernel.tapsPerφ - 1
+        reqDlyLineLen = kernel.tapsPerΦ - 1
     end
 
     dlyLine = zeros( reqDlyLineLen )
@@ -118,8 +118,8 @@ end
 # Does nothing for non-rational kernels
 reset( self::FIRKernel ) = self
 
-# For rational kernel, set φIdx back to 1
-reset( self::FIRRational ) = self.φIdx = 1
+# For rational kernel, set ΦIdx back to 1
+reset( self::FIRRational ) = self.ΦIdx = 1
 
 # For FIRFilter, set delay line to zeros of same tyoe and required length
 function reset( self::FIRFilter )
@@ -148,8 +148,8 @@ end
 
 function polyize{T}( h::Vector{T}, numFilters::Integer )
     hLen      = length( h )
-    hLenPerφ  = iceil(  hLen/numFilters  )
-    pfbSize   = hLenPerφ * numFilters
+    hLenPerΦ  = iceil(  hLen/numFilters  )
+    pfbSize   = hLenPerΦ * numFilters
 
     if hLen != pfbSize                                # check that the vector is an integer multiple of numFilters
         hExtended             = similar( h, pfbSize ) # No? extend and zero pad
@@ -159,8 +159,8 @@ function polyize{T}( h::Vector{T}, numFilters::Integer )
     end
 
     hLen      = length( h )
-    hLenPerφ  = int( hLen/numFilters )
-    pfb       = reshape( h, numFilters, hLenPerφ )'
+    hLenPerΦ  = int( hLen/numFilters )
+    pfb       = reshape( h, numFilters, hLenPerΦ )'
 end
 
 #==============================================================================#
@@ -174,10 +174,10 @@ end
 #
 # ( It's hard to explain how this works without a diagram )
 
-function outputlength( inputlength::Integer, ratio::Rational, initialφ::Integer )
+function outputlength( inputlength::Integer, ratio::Rational, initialΦ::Integer )
     interpolation = num( ratio )
     decimation    = den( ratio )
-    outLen        = (( inputlength * interpolation ) - initialφ + 1 ) / decimation
+    outLen        = (( inputlength * interpolation ) - initialΦ + 1 ) / decimation
     iceil(  outLen  )
 end
 
@@ -197,7 +197,7 @@ end
 
 function outputlength( self::FIRFilter{FIRRational}, inputlength::Integer )
     kernel = self.kernel
-    outputlength( inputlength-kernel.inputDeficit+1, kernel.ratio, kernel.φIdx )
+    outputlength( inputlength-kernel.inputDeficit+1, kernel.ratio, kernel.ΦIdx )
 end
 
 
@@ -209,10 +209,10 @@ end
 #                 | | \| |    |__|  |     |___ |___ | \|                       #
 #==============================================================================#
 
-function inputlength( outputlength::Int, ratio::Rational, initialφ::Integer )
+function inputlength( outputlength::Int, ratio::Rational, initialΦ::Integer )
     interpolation = num( ratio )
     decimation    = den( ratio )
-    inLen = ( outputlength * decimation + initialφ - 1 ) / interpolation
+    inLen = ( outputlength * decimation + initialΦ - 1 ) / interpolation
     iceil( inLen )
 end
 
@@ -233,7 +233,7 @@ end
 
 function inputlength( self::FIRFilter{FIRRational}, outputlength::Integer )
     kernel = self.kernel
-    inLen = inputlength( outputlength, kernel.ratio, kernel.φIdx )
+    inLen = inputlength( outputlength, kernel.ratio, kernel.ΦIdx )
     inLen = inLen + kernel.inputDeficit - 1
 end
 
@@ -249,9 +249,9 @@ end
 function nextphase( currentphase::Integer, ratio::Rational )
     interpolation = num( ratio )
     decimation    = den( ratio )
-    φStep         = mod( decimation, interpolation )
-    φNext         = currentphase + φStep
-    φNext         = φNext > interpolation ? φNext - interpolation : φNext
+    ΦStep         = mod( decimation, interpolation )
+    ΦNext         = currentphase + ΦStep
+    ΦNext         = ΦNext > interpolation ? ΦNext - interpolation : ΦNext
 end
 
 
@@ -325,8 +325,8 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRInterpolator}, x::Vecto
     pfb::PFB{T}        = self.kernel.pfb
     dlyLine::Vector{T} = self.dlyLine
     interpolation      = self.kernel.interpolation
-    Nφ                 = self.kernel.Nφ
-    tapsPerφ           = self.kernel.tapsPerφ
+    NΦ                 = self.kernel.NΦ
+    tapsPerΦ           = self.kernel.tapsPerΦ
     xLen               = length( x )
     bufLen             = length( buffer )
     reqDlyLineLen      = self.reqDlyLineLen
@@ -336,34 +336,34 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRInterpolator}, x::Vecto
     bufLen >= outLen || error( "length( buffer ) must be >= interpolation * length(x)")
 
     inputIdx = 1
-    φ        = 1
+    Φ        = 1
 
     for yIdx in 1:criticalYidx
 
         accumulator = zero(T)
 
-        for k in 1:tapsPerφ-inputIdx
-            @inbounds accumulator += pfb[k, φ] * dlyLine[k+inputIdx-1]
+        for k in 1:tapsPerΦ-inputIdx
+            @inbounds accumulator += pfb[k, Φ] * dlyLine[k+inputIdx-1]
         end
 
         for k in 1:inputIdx
-            @inbounds accumulator += pfb[tapsPerφ-inputIdx+k, φ] * x[k]
+            @inbounds accumulator += pfb[tapsPerΦ-inputIdx+k, Φ] * x[k]
         end
 
         @inbounds buffer[yIdx]  = accumulator
-        (φ, inputIdx) = φ == Nφ ? ( 1, inputIdx+1 ) : ( φ+1, inputIdx )
+        (Φ, inputIdx) = Φ == NΦ ? ( 1, inputIdx+1 ) : ( Φ+1, inputIdx )
     end
 
     for yIdx in criticalYidx+1:outLen
 
         accumulator = zero(T)
 
-        for k in 1:tapsPerφ
-            @inbounds accumulator += pfb[ k, φ ] * x[ inputIdx - tapsPerφ + k ]
+        for k in 1:tapsPerΦ
+            @inbounds accumulator += pfb[ k, Φ ] * x[ inputIdx - tapsPerΦ + k ]
         end
 
         @inbounds buffer[yIdx]  = accumulator
-        (φ, inputIdx) = φ == Nφ ? ( 1, inputIdx+1 ) : ( φ+1, inputIdx )
+        (Φ, inputIdx) = Φ == NΦ ? ( 1, inputIdx+1 ) : ( Φ+1, inputIdx )
     end
 
     if xLen >= self.reqDlyLineLen
@@ -404,15 +404,15 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRRational}, x::Vector{T}
         return T[]
     end
 
-    outLen = outputlength( xLen-kernel.inputDeficit+1, kernel.ratio, kernel.φIdx )
+    outLen = outputlength( xLen-kernel.inputDeficit+1, kernel.ratio, kernel.ΦIdx )
     bufLen >= outLen || error( "buffer is too small" )
 
     pfb::PFB{T}        = kernel.pfb
     dlyLine::Vector{T} = self.dlyLine
     interpolation      = num( kernel.ratio )
     decimation         = den( kernel.ratio )
-    φIdxStepSize       = mod( decimation, interpolation )
-    criticalφIdx       = kernel.Nφ - φIdxStepSize
+    ΦIdxStepSize       = mod( decimation, interpolation )
+    criticalΦIdx       = kernel.NΦ - ΦIdxStepSize
 
     inputIdx           = kernel.inputDeficit
     yIdx               = 0
@@ -422,29 +422,29 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRRational}, x::Vector{T}
         accumulator = zero( T )
         yIdx       += 1
 
-        if inputIdx < kernel.tapsPerφ
+        if inputIdx < kernel.tapsPerΦ
             hIdx = 1
             for k in inputIdx:self.reqDlyLineLen
-                @inbounds accumulator += pfb[ hIdx, kernel.φIdx ] * dlyLine[ k ]
+                @inbounds accumulator += pfb[ hIdx, kernel.ΦIdx ] * dlyLine[ k ]
                 hIdx += 1
             end
 
             for k in 1:inputIdx
-                @inbounds accumulator += pfb[ hIdx, kernel.φIdx ] * x[ k ]
+                @inbounds accumulator += pfb[ hIdx, kernel.ΦIdx ] * x[ k ]
                 hIdx += 1
             end
         else
             hIdx = 1
-            for k in inputIdx-kernel.tapsPerφ+1:inputIdx
-                @inbounds accumulator += pfb[ hIdx, kernel.φIdx ] * x[ k ]
+            for k in inputIdx-kernel.tapsPerΦ+1:inputIdx
+                @inbounds accumulator += pfb[ hIdx, kernel.ΦIdx ] * x[ k ]
                 hIdx += 1
             end
         end
 
         buffer[ yIdx ] = accumulator
 
-        inputIdx   += ifloor( ( kernel.φIdx + decimation - 1 ) / interpolation )
-        kernel.φIdx = nextphase( kernel.φIdx, kernel.ratio )
+        inputIdx   += ifloor( ( kernel.ΦIdx + decimation - 1 ) / interpolation )
+        kernel.ΦIdx = nextphase( kernel.ΦIdx, kernel.ratio )
     end
 
     kernel.inputDeficit = inputIdx - xLen
