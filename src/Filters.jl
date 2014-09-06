@@ -81,7 +81,8 @@ type FIRArbitrary  <: FIRKernel
     criticalYidx::Int
     𝜙Idx::Int
     inputDeficit::Int
-    α::Float64
+    xCount::Int
+    yCount::Int
 end
 
 
@@ -571,6 +572,24 @@ function filt{T}( self::FIRFilter{FIRDecimator}, x::Vector{T} )
     filt!( buffer, self, x )
 
     return buffer
+end
+
+
+
+
+#==============================================================================#
+#        ____ ____ ___      ____ ____ ____ ____ _  _ ___  _    ____ ____       #
+#        |__| |__/ |__]     |__/ |___ [__  |__| |\/| |__] |    |___ |__/       #
+#        |  | |  \ |__] .   |  \ |___ ___] |  | |  | |    |___ |___ |  \       #
+#==============================================================================#
+
+function filt{T}( self::FIRFilter{FIRRational}, x::Vector{T} )
+    kernel   = self.kernel
+    xLen     = length( x )
+    inputIdx = 1
+    
+    while inputIdx < xLen
+    end
 end
 
 
