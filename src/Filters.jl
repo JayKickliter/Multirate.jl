@@ -80,12 +80,14 @@ type FIRArbitrary  <: FIRKernel
     resampleRate::Float64
     yCount::Int
     xCount::Int
+    yLower::Number
+    last𝜙wrapped::Bool
 end
 
 function FIRArbitrary( h::Vector, resampleRate::Real, numFilters::Integer )
     pfb              = flipud( polyize( h, numFilters ) )
     ( tapsPer𝜙, N𝜙 ) = size( pfb )
-    FIRArbitrary( pfb, N𝜙, tapsPer𝜙, resampleRate, 0, 0 )
+    FIRArbitrary( pfb, N𝜙, tapsPer𝜙, resampleRate, 0, 0, 0.0, false )
 end
 
 
@@ -599,14 +601,12 @@ end
 #==============================================================================#
 
 function parameters( self::FIRFilter{FIRArbitrary}, yIdx::Int )
-    kernel    = self.kernel
-    yCount    = kernel.yCount + yIdx - 1
-    𝜙IdxLower = ifloor( mod( yCount/kernel.resampleRate, 1 ) * kernel.N𝜙 ) + 1
-    𝜙IdxUpper = 𝜙IdxLower == kernel.N𝜙 ? 1 : 𝜙IdxLower + 1
-    xIdxLower = ifloor( yCount/kernel.resampleRate ) - kernel.xCount + 1
-    xIdxUpper = 𝜙IdxLower == kernel.N𝜙 ? xIdxLower + 1 : xIdxLower
-    α         = mod( yCount * kernel.N𝜙 / kernel.resampleRate, 1 )
-    ( 𝜙IdxLower, 𝜙IdxUpper, xIdxLower, xIdxUpper, α )
+    kernel = self.kernel
+    yCount = kernel.yCount + yIdx - 1
+    𝜙Idx   = ifloor( mod( yCount/kernel.resampleRate, 1 ) * kernel.N𝜙 ) + 1
+    xIdx   = ifloor( yCount/kernel.resampleRate ) - kernel.xCount + 1
+    α      = mod( yCount * kernel.N𝜙 / kernel.resampleRate, 1 )
+    𝜙Idx, xIdx, α
 end
 
 function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
@@ -621,47 +621,49 @@ function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
     yLen   = iceil( xLen * kernel.resampleRate )
     buffer = similar( x, yLen )
 
-    ( 𝜙IdxLower, 𝜙IdxUpper, xIdxLower, xIdxUpper, α ) = parameters( self, yIdx )
+    (𝜙Idx, xIdx, α) = parameters( self, yIdx )
 
-    while xIdxLower <= xLen
-        println( "𝜙IdxLower = $𝜙IdxLower, 𝜙IdxUpper = $𝜙IdxUpper, xIdxLower = $xIdxLower, xIdxUpper = $xIdxUpper, α = $α" )
+    while xIdx <= xLen
+        # println( "𝜙Idx = $𝜙Idx, 𝜙Idx = $𝜙Idx, xIdx = $xIdx, xIdx = $xIdx, α = $α" )
         yLower = zero(T)
         yUpper = zero(T)
 
         # Compute yLower
-        if xIdxLower < kernel.tapsPer𝜙
+        if xIdx < kernel.tapsPer𝜙
             hIdx = 1
-            for k in xIdxLower:self.reqDlyLineLen
-                yLower += pfb[ hIdx, 𝜙IdxLower ] * dlyLine[ k ]
+            for k in xIdx:self.reqDlyLineLen
+                yLower += pfb[ hIdx, 𝜙Idx ] * dlyLine[ k ]
                 hIdx += 1
             end
-            for k in 1:xIdxLower
-                yLower += pfb[ hIdx, 𝜙IdxLower ] * x[ k ]
+            for k in 1:xIdx
+                yLower += pfb[ hIdx, 𝜙Idx ] * x[ k ]
                 hIdx += 1
             end
         else
             hIdx = 1
-            for k in xIdxLower-kernel.tapsPer𝜙+1:xIdxLower
-                yLower += pfb[ hIdx, 𝜙IdxLower ] * x[ k ]
+            for k in xIdx-kernel.tapsPer𝜙+1:xIdx
+                yLower += pfb[ hIdx, 𝜙Idx ] * x[ k ]
                 hIdx += 1
             end
         end
 
+        (xIdx, 𝜙Idx) = 𝜙Idx == kernel.N𝜙 ? (xIdx + 1, 1) : (xIdx, 𝜙Idx + 1)
+        
         # Compute yUpper
-        if xIdxUpper < kernel.tapsPer𝜙
+        if xIdx < kernel.tapsPer𝜙
             hIdx = 1
-            for k in xIdxUpper:self.reqDlyLineLen
-                yUpper += pfb[ hIdx, 𝜙IdxUpper ] * dlyLine[ k ]
+            for k in xIdx:self.reqDlyLineLen
+                yUpper += pfb[ hIdx, 𝜙Idx ] * dlyLine[ k ]
                 hIdx += 1
             end
-            for k in 1:xIdxUpper
-                yUpper += pfb[ hIdx, 𝜙IdxUpper ] * x[ k ]
+            for k in 1:xIdx
+                yUpper += pfb[ hIdx, 𝜙Idx ] * x[ k ]
                 hIdx += 1
             end
         else
             hIdx = 1
-            for k in xIdxUpper-kernel.tapsPer𝜙+1:xIdxUpper
-                yUpper += pfb[ hIdx, 𝜙IdxUpper ] * x[ k ]
+            for k in xIdx-kernel.tapsPer𝜙+1:xIdx
+                yUpper += pfb[ hIdx, 𝜙Idx ] * x[ k ]
                 hIdx += 1
             end
         end
@@ -669,8 +671,16 @@ function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
         buffer[yIdx] = yLower * (1 - α) + yUpper * α
 
         yIdx += 1
-        ( 𝜙IdxLower, 𝜙IdxUpper, xIdxLower, xIdxUpper, α ) = parameters( self, yIdx )
+        ( 𝜙Idx, xIdx, α ) = parameters( self, yIdx )
     end
+    
+    if xLen >= self.reqDlyLineLen
+        copy!( dlyLine, 1, x, xLen - self.reqDlyLineLen + 1, self.reqDlyLineLen )
+    else
+        dlyLine = [ dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
+    end
+    self.dlyLine = dlyLine
+    
     return buffer
 end
 
