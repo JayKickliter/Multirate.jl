@@ -81,14 +81,28 @@ type FIRArbitrary  <: FIRKernel
     yCount::Int
     xCount::Int
     yLower::Number
-    last𝜙wrapped::Bool
+    yUpperStalled::Bool
+    𝜙Idx::Int
+    xIdxDelta::Int
+    inputDeficit::Int
+    α::Float64
+    function FIRArbitrary( h::Vector, resampleRate::Real, numFilters::Integer )
+        pfb           = flipud( polyize( h, numFilters ) )
+        tapsPer𝜙      = size( pfb )[1]
+        N𝜙            = size( pfb )[2]
+        resampleRate  = resampleRate
+        yCount        = 0
+        xCount        = 0
+        yLower        = NaN
+        yUpperStalled = false
+        𝜙Idx          = 0
+        inputDeficit  = 1
+        xIdxDelta     = 0
+        α             = 0.0
+        new( pfb, N𝜙, tapsPer𝜙, resampleRate, yCount, xCount, yLower, yUpperStalled, 𝜙Idx, xIdxDelta, inputDeficit, α )
+    end
 end
 
-function FIRArbitrary( h::Vector, resampleRate::Real, numFilters::Integer )
-    pfb              = flipud( polyize( h, numFilters ) )
-    ( tapsPer𝜙, N𝜙 ) = size( pfb )
-    FIRArbitrary( pfb, N𝜙, tapsPer𝜙, resampleRate, 0, 0, 0.0, false )
-end
 
 
 # FIRFilter - the kernel does the heavy lifting
@@ -128,6 +142,8 @@ function FIRFilter( h::Vector, resampleRate::FloatingPoint, numFilters::Integer 
     kernel        = FIRArbitrary( h, resampleRate, numFilters )
     reqDlyLineLen = kernel.tapsPer𝜙 - 1
     dlyLine       = zeros( reqDlyLineLen )
+
+    updatestate!( kernel )
 
     FIRFilter( kernel, dlyLine, reqDlyLineLen )
 end
@@ -609,78 +625,100 @@ function parameters( self::FIRFilter{FIRArbitrary}, yIdx::Int )
     𝜙Idx, xIdx, α
 end
 
-function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
-    kernel   = self.kernel
-    xLen     = length( x )
-    outLen   = ifloor( xLen * kernel.resampleRate )
-    yIdx     = 1
+function updatestate!( self::FIRArbitrary )
+    self.yCount   += 1
+    self.𝜙Idx      = ifloor( mod( (self.yCount-1)/self.resampleRate, 1 ) * self.N𝜙 ) + 1
+    xCountCurrent  = self.xCount
+    self.xCount    = ifloor( (self.yCount-1)/self.resampleRate )
+    self.xIdxDelta = self.xCount - xCountCurrent
+    self.α         = mod( (self.yCount-1) * self.N𝜙 / self.resampleRate, 1 )
+end
 
+function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
+    kernel             = self.kernel
+    xLen               = length( x )
+    buffer             = T[]
     pfb::PFB{T}        = kernel.pfb
     dlyLine::Vector{T} = self.dlyLine
 
-    yLen   = iceil( xLen * kernel.resampleRate )
-    buffer = similar( x, yLen )
+    if kernel.yUpperStalled && xLen >= 1
+        yUpper = dot( kernel.pfb[:,1], [ self.dlyLine, x[1] ]  )
+        thisY = kernel.yLower * (1 - kernel.α) + yUpper * kernel.α
+        push!( buffer, thisY )
+    end
 
-    (𝜙Idx, xIdx, α) = parameters( self, yIdx )
+    if xLen < kernel.inputDeficit
+        self.dlyLine = [ self.dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
+        kernel.inputDeficit -= xLen
+        return buffer
+    end
 
-    while xIdx <= xLen
-        # println( "𝜙Idx = $𝜙Idx, 𝜙Idx = $𝜙Idx, xIdx = $xIdx, xIdx = $xIdx, α = $α" )
+    inputIdx = kernel.inputDeficit
+
+    while inputIdx <= xLen
+        println( "yCount = $(kernel.yCount), 𝜙Idx = $(kernel.𝜙Idx), inputIdx = $inputIdx, α = $(kernel.α)" )
         yLower = zero(T)
         yUpper = zero(T)
 
         # Compute yLower
-        if xIdx < kernel.tapsPer𝜙
+        if inputIdx < kernel.tapsPer𝜙
             hIdx = 1
-            for k in xIdx:self.reqDlyLineLen
-                yLower += pfb[ hIdx, 𝜙Idx ] * dlyLine[ k ]
+            for k in inputIdx:self.reqDlyLineLen
+                yLower += pfb[ hIdx, kernel.𝜙Idx ] * dlyLine[ k ]
                 hIdx += 1
             end
-            for k in 1:xIdx
-                yLower += pfb[ hIdx, 𝜙Idx ] * x[ k ]
+            for k in 1:inputIdx
+                yLower += pfb[ hIdx, kernel.𝜙Idx ] * x[ k ]
                 hIdx += 1
             end
         else
             hIdx = 1
-            for k in xIdx-kernel.tapsPer𝜙+1:xIdx
-                yLower += pfb[ hIdx, 𝜙Idx ] * x[ k ]
+            for k in inputIdx-kernel.tapsPer𝜙+1:inputIdx
+                yLower += pfb[ hIdx, kernel.𝜙Idx ] * x[ k ]
                 hIdx += 1
             end
         end
 
-        (xIdx, 𝜙Idx) = 𝜙Idx == kernel.N𝜙 ? (xIdx + 1, 1) : (xIdx, 𝜙Idx + 1)
-        
-        # Compute yUpper
-        if xIdx < kernel.tapsPer𝜙
-            hIdx = 1
-            for k in xIdx:self.reqDlyLineLen
-                yUpper += pfb[ hIdx, 𝜙Idx ] * dlyLine[ k ]
-                hIdx += 1
+        if inputIdx < xLen || kernel.𝜙Idx != kernel.N𝜙
+            # Compute yUpper
+            if inputIdx < kernel.tapsPer𝜙
+                hIdx = 1
+                for k in inputIdx:self.reqDlyLineLen
+                    yUpper += pfb[ hIdx, kernel.𝜙Idx ] * dlyLine[ k ]
+                    hIdx += 1
+                end
+                for k in 1:inputIdx
+                    yUpper += pfb[ hIdx, kernel.𝜙Idx ] * x[ k ]
+                    hIdx += 1
+                end
+            else
+                hIdx = 1
+                for k in inputIdx-kernel.tapsPer𝜙+1:inputIdx
+                    yUpper += pfb[ hIdx, kernel.𝜙Idx ] * x[ k ]
+                    hIdx += 1
+                end
             end
-            for k in 1:xIdx
-                yUpper += pfb[ hIdx, 𝜙Idx ] * x[ k ]
-                hIdx += 1
-            end
+
+            thisY = yLower * (1 - kernel.α) + yUpper * kernel.α
+            push!( buffer, thisY )
         else
-            hIdx = 1
-            for k in xIdx-kernel.tapsPer𝜙+1:xIdx
-                yUpper += pfb[ hIdx, 𝜙Idx ] * x[ k ]
-                hIdx += 1
-            end
+            self.yLower        = yLower
+            self.yUpperStalled = true
         end
 
-        buffer[yIdx] = yLower * (1 - α) + yUpper * α
-
-        yIdx += 1
-        ( 𝜙Idx, xIdx, α ) = parameters( self, yIdx )
+        updatestate!( kernel )
+        inputIdx += kernel.xIdxDelta
     end
-    
+
+    kernel.inputDeficit = inputIdx - xLen
+
     if xLen >= self.reqDlyLineLen
         copy!( dlyLine, 1, x, xLen - self.reqDlyLineLen + 1, self.reqDlyLineLen )
     else
         dlyLine = [ dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
     end
     self.dlyLine = dlyLine
-    
+
     return buffer
 end
 
