@@ -28,4 +28,6 @@ export  FIRFilter,
         outputlength,
         inputlength
 
+include( "NaiveResamplers.jl" )
+
 end # module
