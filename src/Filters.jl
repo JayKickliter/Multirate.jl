@@ -75,14 +75,17 @@ end
 # Arbitrary resampler FIR kernel
 type FIRArbitrary  <: FIRKernel
     pfb::PFB
-    ratio::Rational{Int}
     N𝜙::Int
     tapsPer𝜙::Int
-    criticalYidx::Int
-    𝜙Idx::Int
-    inputDeficit::Int
-    xCount::Int
+    resampleRate::Float64
     yCount::Int
+    xCount::Int
+end
+
+function FIRArbitrary( h::Vector, resampleRate::Real, numFilters::Integer )
+    pfb              = flipud( polyize( h, numFilters ) )
+    ( tapsPer𝜙, N𝜙 ) = size( pfb )
+    FIRArbitrary( pfb, N𝜙, tapsPer𝜙, resampleRate, 0, 0 )
 end
 
 
@@ -116,6 +119,18 @@ function FIRFilter( h::Vector, resampleRatio::Rational = 1//1 )
 
     FIRFilter( kernel, dlyLine, reqDlyLineLen )
 end
+
+function FIRFilter( h::Vector, resampleRate::FloatingPoint, numFilters::Integer = 32 )
+    resampleRate > 0.0 || error( "resampleRate must be greater than 0" )
+
+    kernel        = FIRArbitrary( h, resampleRate, numFilters )
+    reqDlyLineLen = kernel.tapsPer𝜙 - 1
+    dlyLine       = zeros( reqDlyLineLen )
+
+    FIRFilter( kernel, dlyLine, reqDlyLineLen )
+end
+
+
 
 
 
@@ -583,13 +598,80 @@ end
 #        |  | |  \ |__] .   |  \ |___ ___] |  | |  | |    |___ |___ |  \       #
 #==============================================================================#
 
-function filt{T}( self::FIRFilter{FIRRational}, x::Vector{T} )
+function parameters( self::FIRFilter{FIRArbitrary}, yIdx::Int )
+    kernel    = self.kernel
+    yCount    = kernel.yCount + yIdx - 1
+    𝜙IdxLower = ifloor( mod( yCount/kernel.resampleRate, 1 ) * kernel.N𝜙 ) + 1
+    𝜙IdxUpper = 𝜙IdxLower == kernel.N𝜙 ? 1 : 𝜙IdxLower + 1
+    xIdxLower = ifloor( yCount/kernel.resampleRate ) - kernel.xCount + 1
+    xIdxUpper = 𝜙IdxLower == kernel.N𝜙 ? xIdxLower + 1 : xIdxLower
+    α         = mod( yCount * kernel.N𝜙 / kernel.resampleRate, 1 )
+    ( 𝜙IdxLower, 𝜙IdxUpper, xIdxLower, xIdxUpper, α )
+end
+
+function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
     kernel   = self.kernel
     xLen     = length( x )
-    inputIdx = 1
-    
-    while inputIdx < xLen
+    outLen   = ifloor( xLen * kernel.resampleRate )
+    yIdx     = 1
+
+    pfb::PFB{T}        = kernel.pfb
+    dlyLine::Vector{T} = self.dlyLine
+
+    yLen   = iceil( xLen * kernel.resampleRate )
+    buffer = similar( x, yLen )
+
+    ( 𝜙IdxLower, 𝜙IdxUpper, xIdxLower, xIdxUpper, α ) = parameters( self, yIdx )
+
+    while xIdxLower <= xLen
+        println( "𝜙IdxLower = $𝜙IdxLower, 𝜙IdxUpper = $𝜙IdxUpper, xIdxLower = $xIdxLower, xIdxUpper = $xIdxUpper, α = $α" )
+        yLower = zero(T)
+        yUpper = zero(T)
+
+        # Compute yLower
+        if xIdxLower < kernel.tapsPer𝜙
+            hIdx = 1
+            for k in xIdxLower:self.reqDlyLineLen
+                yLower += pfb[ hIdx, 𝜙IdxLower ] * dlyLine[ k ]
+                hIdx += 1
+            end
+            for k in 1:xIdxLower
+                yLower += pfb[ hIdx, 𝜙IdxLower ] * x[ k ]
+                hIdx += 1
+            end
+        else
+            hIdx = 1
+            for k in xIdxLower-kernel.tapsPer𝜙+1:xIdxLower
+                yLower += pfb[ hIdx, 𝜙IdxLower ] * x[ k ]
+                hIdx += 1
+            end
+        end
+
+        # Compute yUpper
+        if xIdxUpper < kernel.tapsPer𝜙
+            hIdx = 1
+            for k in xIdxUpper:self.reqDlyLineLen
+                yUpper += pfb[ hIdx, 𝜙IdxUpper ] * dlyLine[ k ]
+                hIdx += 1
+            end
+            for k in 1:xIdxUpper
+                yUpper += pfb[ hIdx, 𝜙IdxUpper ] * x[ k ]
+                hIdx += 1
+            end
+        else
+            hIdx = 1
+            for k in xIdxUpper-kernel.tapsPer𝜙+1:xIdxUpper
+                yUpper += pfb[ hIdx, 𝜙IdxUpper ] * x[ k ]
+                hIdx += 1
+            end
+        end
+
+        buffer[yIdx] = yLower * (1 - α) + yUpper * α
+
+        yIdx += 1
+        ( 𝜙IdxLower, 𝜙IdxUpper, xIdxLower, xIdxUpper, α ) = parameters( self, yIdx )
     end
+    return buffer
 end
 
 

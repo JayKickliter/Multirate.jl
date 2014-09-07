@@ -33,6 +33,26 @@ function areApprox( x1::Vector, x2::Vector )
     return true
 end
 
+function naiveresample{T}( h::Vector{T}, x::Vector{T}, resampleRate::Real, numfilters::Integer = 32 )
+
+    xLen = length( x )
+    yLen = iceil( xLen * resampleRate )
+    y    = similar( x, yLen )
+    x    = filt( h, x, numfilters//1 )
+
+    yIdx = 1
+
+    for yIdx in 1:yLen
+        xIdxVirtual = numfilters * (yIdx - 1) / resampleRate + 1
+        xIdxLower   = ifloor( xIdxVirtual )
+        xIdxUpper   = iceil( xIdxVirtual )
+        Δ           = xIdxVirtual - xIdxLower
+        y[yIdx]     = x[xIdxLower] + Δ*( x[xIdxUpper] - x[xIdxLower] )
+    end
+
+    return y
+end
+
 #==============================================================================#
 #               ____ _ _  _ ____ _    ____    ____ ____ ___ ____               #
 #               [__  | |\ | | __ |    |___    |__/ |__|  |  |___               #
