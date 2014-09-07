@@ -82,24 +82,28 @@ type FIRArbitrary  <: FIRKernel
     xCount::Int
     yLower::Number
     yUpperStalled::Bool
-    𝜙Idx::Int
+    𝜙IdxLower::Int
+    𝜙IdxUpper::Int
     xIdxDelta::Int
+    xIdxUpperOffset::Int
     inputDeficit::Int
     α::Float64
     function FIRArbitrary( h::Vector, resampleRate::Real, numFilters::Integer )
-        pfb           = flipud( polyize( h, numFilters ) )
-        tapsPer𝜙      = size( pfb )[1]
-        N𝜙            = size( pfb )[2]
-        resampleRate  = resampleRate
-        yCount        = 0
-        xCount        = 0
-        yLower        = NaN
-        yUpperStalled = false
-        𝜙Idx          = 0
-        inputDeficit  = 1
-        xIdxDelta     = 0
-        α             = 0.0
-        new( pfb, N𝜙, tapsPer𝜙, resampleRate, yCount, xCount, yLower, yUpperStalled, 𝜙Idx, xIdxDelta, inputDeficit, α )
+        pfb             = flipud( polyize( h, numFilters ) )
+        tapsPer𝜙        = size( pfb )[1]
+        N𝜙              = size( pfb )[2]
+        resampleRate    = resampleRate
+        yCount          = 0
+        xCount          = 0
+        yLower          = NaN
+        yUpperStalled   = false
+        𝜙IdxLower       = 0
+        𝜙IdxUpper       = 0
+        inputDeficit    = 1
+        xIdxDelta       = 0
+        xIdxUpperOffset = 0
+        α               = 0.0
+        new( pfb, N𝜙, tapsPer𝜙, resampleRate, yCount, xCount, yLower, yUpperStalled, 𝜙IdxLower, 𝜙IdxUpper, xIdxDelta, xIdxUpperOffset, inputDeficit, α )
     end
 end
 
@@ -147,8 +151,6 @@ function FIRFilter( h::Vector, resampleRate::FloatingPoint, numFilters::Integer 
 
     FIRFilter( kernel, dlyLine, reqDlyLineLen )
 end
-
-
 
 
 
@@ -616,36 +618,33 @@ end
 #        |  | |  \ |__] .   |  \ |___ ___] |  | |  | |    |___ |___ |  \       #
 #==============================================================================#
 
-function parameters( self::FIRFilter{FIRArbitrary}, yIdx::Int )
-    kernel = self.kernel
-    yCount = kernel.yCount + yIdx - 1
-    𝜙Idx   = ifloor( mod( yCount/kernel.resampleRate, 1 ) * kernel.N𝜙 ) + 1
-    xIdx   = ifloor( yCount/kernel.resampleRate ) - kernel.xCount + 1
-    α      = mod( yCount * kernel.N𝜙 / kernel.resampleRate, 1 )
-    𝜙Idx, xIdx, α
-end
-
 function updatestate!( self::FIRArbitrary )
-    self.yCount   += 1
-    self.𝜙Idx      = ifloor( mod( (self.yCount-1)/self.resampleRate, 1 ) * self.N𝜙 ) + 1
-    xCountCurrent  = self.xCount
-    self.xCount    = ifloor( (self.yCount-1)/self.resampleRate )
-    self.xIdxDelta = self.xCount - xCountCurrent
-    self.α         = mod( (self.yCount-1) * self.N𝜙 / self.resampleRate, 1 )
+    self.yCount         += 1
+    self.𝜙IdxLower       = ifloor( mod( (self.yCount-1)/self.resampleRate, 1 ) * self.N𝜙 ) + 1
+    self.𝜙IdxUpper       = self.𝜙IdxLower == self.N𝜙 ? 1 : self.𝜙IdxLower + 1
+    self.xIdxUpperOffset = self.𝜙IdxLower == self.N𝜙 ? 1 : 0
+    xCountCurrent        = self.xCount
+    self.xCount          = ifloor( (self.yCount-1)/self.resampleRate )
+    self.xIdxDelta       = self.xCount - xCountCurrent
+    self.α               = mod( (self.yCount-1) * self.N𝜙 / self.resampleRate, 1 )
 end
 
 function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
     kernel             = self.kernel
     xLen               = length( x )
-    buffer             = T[]
+    bufLen             = iceil( xLen * kernel.resampleRate ) + 1
+    buffer             = similar( x, bufLen )
     pfb::PFB{T}        = kernel.pfb
     dlyLine::Vector{T} = self.dlyLine
+    bufIdx               = 1
 
     if kernel.yUpperStalled && xLen >= 1
-        yUpper = dot( kernel.pfb[:,1], [ self.dlyLine, x[1] ]  )
-        thisY = kernel.yLower * (1 - kernel.α) + yUpper * kernel.α
-        push!( buffer, thisY )
+        yUpper       = dot( kernel.pfb[:,1], [ self.dlyLine, x[1] ]  )
+        buffer[bufIdx] = kernel.yLower * (1 - kernel.α) + yUpper * kernel.α
+        bufIdx        += 1
     end
+
+    kernel.yUpperStalled
 
     if xLen < kernel.inputDeficit
         self.dlyLine = [ self.dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
@@ -656,59 +655,65 @@ function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
     inputIdx = kernel.inputDeficit
 
     while inputIdx <= xLen
-        println( "yCount = $(kernel.yCount), 𝜙Idx = $(kernel.𝜙Idx), inputIdx = $inputIdx, α = $(kernel.α)" )
+        println( "yCount = $(kernel.yCount), 𝜙Idx = $(kernel.𝜙IdxLower), inputIdx = $inputIdx, α = $(kernel.α)" )
         yLower = zero(T)
         yUpper = zero(T)
 
+        xIdx = inputIdx
+
         # Compute yLower
-        if inputIdx < kernel.tapsPer𝜙
+        if xIdx < kernel.tapsPer𝜙
             hIdx = 1
-            for k in inputIdx:self.reqDlyLineLen
-                yLower += pfb[ hIdx, kernel.𝜙Idx ] * dlyLine[ k ]
+            for k in xIdx:self.reqDlyLineLen
+                yLower += pfb[ hIdx, kernel.𝜙IdxLower ] * dlyLine[ k ]
                 hIdx += 1
             end
-            for k in 1:inputIdx
-                yLower += pfb[ hIdx, kernel.𝜙Idx ] * x[ k ]
+            for k in 1:xIdx
+                yLower += pfb[ hIdx, kernel.𝜙IdxLower ] * x[ k ]
                 hIdx += 1
             end
         else
             hIdx = 1
-            for k in inputIdx-kernel.tapsPer𝜙+1:inputIdx
-                yLower += pfb[ hIdx, kernel.𝜙Idx ] * x[ k ]
+            for k in xIdx-kernel.tapsPer𝜙+1:xIdx
+                yLower += pfb[ hIdx, kernel.𝜙IdxLower ] * x[ k ]
                 hIdx += 1
             end
         end
 
-        if inputIdx < xLen || kernel.𝜙Idx != kernel.N𝜙
+        xIdx += kernel.xIdxUpperOffset
+        if xIdx <= xLen
             # Compute yUpper
-            if inputIdx < kernel.tapsPer𝜙
+
+            if xIdx < kernel.tapsPer𝜙
                 hIdx = 1
-                for k in inputIdx:self.reqDlyLineLen
-                    yUpper += pfb[ hIdx, kernel.𝜙Idx ] * dlyLine[ k ]
+                for k in xIdx:self.reqDlyLineLen
+                    yUpper += pfb[ hIdx, kernel.𝜙IdxUpper ] * dlyLine[ k ]
                     hIdx += 1
                 end
-                for k in 1:inputIdx
-                    yUpper += pfb[ hIdx, kernel.𝜙Idx ] * x[ k ]
+                for k in 1:xIdx
+                    yUpper += pfb[ hIdx, kernel.𝜙IdxUpper ] * x[ k ]
                     hIdx += 1
                 end
             else
                 hIdx = 1
-                for k in inputIdx-kernel.tapsPer𝜙+1:inputIdx
-                    yUpper += pfb[ hIdx, kernel.𝜙Idx ] * x[ k ]
+                for k in xIdx-kernel.tapsPer𝜙+1:xIdx
+                    yUpper += pfb[ hIdx, kernel.𝜙IdxUpper ] * x[ k ]
                     hIdx += 1
                 end
             end
 
-            thisY = yLower * (1 - kernel.α) + yUpper * kernel.α
-            push!( buffer, thisY )
+            buffer[bufIdx] = yLower * (1 - kernel.α) + yUpper * kernel.α
         else
-            self.yLower        = yLower
-            self.yUpperStalled = true
+            kernel.yLower        = yLower
+            kernel.yUpperStalled = true
         end
 
         updatestate!( kernel )
         inputIdx += kernel.xIdxDelta
+        bufIdx   += 1
     end
+
+    resize!( buffer, bufIdx - 1)
 
     kernel.inputDeficit = inputIdx - xLen
 
