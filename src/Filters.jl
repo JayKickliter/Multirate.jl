@@ -88,6 +88,7 @@ type FIRArbitrary  <: FIRKernel
     xIdxUpperOffset::Int
     inputDeficit::Int
     α::Float64
+    αLast::Float64
     function FIRArbitrary( h::Vector, resampleRate::Real, numFilters::Integer )
         pfb             = flipud( polyize( h, numFilters ) )
         tapsPer𝜙        = size( pfb )[1]
@@ -103,7 +104,8 @@ type FIRArbitrary  <: FIRKernel
         xIdxDelta       = 0
         xIdxUpperOffset = 0
         α               = 0.0
-        new( pfb, N𝜙, tapsPer𝜙, resampleRate, yCount, xCount, yLower, yUpperStalled, 𝜙IdxLower, 𝜙IdxUpper, xIdxDelta, xIdxUpperOffset, inputDeficit, α )
+        αLast           = 0.0
+        new( pfb, N𝜙, tapsPer𝜙, resampleRate, yCount, xCount, yLower, yUpperStalled, 𝜙IdxLower, 𝜙IdxUpper, xIdxDelta, xIdxUpperOffset, inputDeficit, α, αLast )
     end
 end
 
@@ -626,6 +628,7 @@ function updatestate!( self::FIRArbitrary )
     xCountCurrent        = self.xCount
     self.xCount          = ifloor( (self.yCount-1)/self.resampleRate )
     self.xIdxDelta       = self.xCount - xCountCurrent
+    self.αLast           = self.α
     self.α               = mod( (self.yCount-1) * self.N𝜙 / self.resampleRate, 1 )
 end
 
@@ -636,26 +639,25 @@ function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
     buffer             = similar( x, bufLen )
     pfb::PFB{T}        = kernel.pfb
     dlyLine::Vector{T} = self.dlyLine
-    bufIdx               = 1
+    bufIdx             = 1
 
     if kernel.yUpperStalled && xLen >= 1
-        yUpper       = dot( kernel.pfb[:,1], [ self.dlyLine, x[1] ]  )
-        buffer[bufIdx] = kernel.yLower * (1 - kernel.α) + yUpper * kernel.α
-        bufIdx        += 1
+        yUpper               = dot( kernel.pfb[:,1], [ self.dlyLine, x[1] ]  )
+        buffer[bufIdx]       = kernel.yLower * (1 - kernel.αLast) + yUpper * kernel.αLast
+        kernel.yUpperStalled = false
+        bufIdx              += 1
     end
-
-    kernel.yUpperStalled
 
     if xLen < kernel.inputDeficit
         self.dlyLine = [ self.dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
         kernel.inputDeficit -= xLen
-        return buffer
+        return buffer[1:bufIdx-1]
     end
 
     inputIdx = kernel.inputDeficit
 
     while inputIdx <= xLen
-        println( "yCount = $(kernel.yCount), 𝜙Idx = $(kernel.𝜙IdxLower), inputIdx = $inputIdx, α = $(kernel.α)" )
+        # print( "yCount = $(kernel.yCount), 𝜙Idx = $(kernel.𝜙IdxLower), inputIdx = $inputIdx, α = $(kernel.α), " )
         yLower = zero(T)
         yUpper = zero(T)
 
@@ -680,7 +682,11 @@ function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
             end
         end
 
+        kernel.yLower = yLower
         xIdx += kernel.xIdxUpperOffset
+
+        # println( "x2 idx = $xIdx")
+
         if xIdx <= xLen
             # Compute yUpper
 
@@ -701,16 +707,14 @@ function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
                     hIdx += 1
                 end
             end
-
             buffer[bufIdx] = yLower * (1 - kernel.α) + yUpper * kernel.α
+            bufIdx   += 1
         else
-            kernel.yLower        = yLower
             kernel.yUpperStalled = true
         end
 
         updatestate!( kernel )
         inputIdx += kernel.xIdxDelta
-        bufIdx   += 1
     end
 
     resize!( buffer, bufIdx - 1)
