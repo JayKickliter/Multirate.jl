@@ -390,18 +390,20 @@ end
 
 
 
-
-
-
+#==============================================================================#
+#                  ____ _  _ _  _    ___ ____ ____ ___ ____                    #
+#                  |__/ |  | |\ |     |  |___ [__   |  [__                     #
+#                  |  \ |__| | \|     |  |___ ___]  |  ___]                    #
+#==============================================================================#
 
 function test_all()
-    for interpolation in 1:16,
-            decimation in 1:16,
+    for interpolation in sort([1, unique(rand(2:64,8))] ),
+            decimation in sort([1, unique(rand(2:64,8))] ),
                 Th in [Float32, Float64],
                     Tx in [Float32, Float64, Complex64, Complex128]
 
         h     = rand(Th, rand(16:128,1)[1] )
-        xLen  = int(rand( 1000:2000, 1 )[1])
+        xLen  = int(rand( 100:2000, 1 )[1])
         xLen  = xLen-mod( xLen, decimation )
         x     = rand( Tx, xLen )
         ratio = interpolation//decimation
@@ -419,7 +421,7 @@ function test_all()
         end
 
 
-        if num(ratio) != 1 && den(ratio) != 1
+        if num(ratio) == interpolation && den(ratio) == decimation && num(ratio) != 1 && den(ratio) != 1
             @test test_rational( h, x, ratio )
             @test test_arbitrary( x, float64(ratio), 32 )
         end
