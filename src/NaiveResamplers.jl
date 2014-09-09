@@ -2,20 +2,20 @@ module NaiveResamplers
 export naivefilt
 
 # Naive rational resampler
-function naivefilt{T}( h::Vector{T}, x::Vector{T}, resamplerate::Rational = 1//1 )
+function naivefilt( h::Vector, x::Vector, resamplerate::Rational = 1//1 )
 
     upfactor     = num( resamplerate )
     downfactor   = den( resamplerate )
     xLen         = length( x )
-    xZeroStuffed = zeros( T, length( x ) * upfactor )
+    xZeroStuffed = zeros( eltype(x), length( x ) * upfactor )
     yLen         = int( ceil( length(x) * resamplerate ) )
-    y            = Array( T, yLen )
+    y            = similar( x, yLen )
 
     for n in 0:length(x)-1
         xZeroStuffed[ n*upfactor+1 ] = x[ n+1 ]
     end
 
-    y = firfilt( h, xZeroStuffed )
+    y = Base.filt( h, 1.0, xZeroStuffed )
     y = [ y[n] for n = 1:downfactor:length( y ) ]
 end
 
@@ -23,12 +23,11 @@ end
 
 
 # Naive arbitrary resampler
-# Uses a polyphase interpolator, followed by lineary interpolation
-function naivefilt{T}( h::Vector{T}, x::Vector{T}, resamplerate::FloatingPoint, numfilters::Integer = 32 )
+function naivefilt( h::Vector, x::Vector, resamplerate::FloatingPoint, numfilters::Integer = 32 )
 
     xLen          = length( x )
     xInterpolated = naivefilt( h, x, numfilters//1 )
-    xxLen         = length(xInterpolated)
+    xxLen         = length( xInterpolated )
     yLen          = iceil( xLen * resamplerate )
     y             = similar( x, yLen )
     yIdx          = 1
