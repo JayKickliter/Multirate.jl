@@ -1,6 +1,7 @@
 using Base.Test
 import Multirate
 import DSP
+import Multirate.NaiveResamplers
 
 # Disable time and printf macros when not running interactivly ( for travis )
 if !isinteractive()
@@ -341,6 +342,58 @@ end
 
 
 
+#==============================================================================#
+#        ____ ____ ___      ____ ____ ____ ____ _  _ ___  _    _ _  _ ____     #
+#        |__| |__/ |__]     |__/ |___ [__  |__| |\/| |__] |    | |\ | | __     #
+#        |  | |  \ |__] .   |  \ |___ ___] |  | |  | |    |___ | | \| |__]     #
+#==============================================================================#
+
+function test_arbitrary( x, resampleRate, numFilters )
+    cutoffFreq      = 0.45
+    transitionWidth = 0.05
+    (hLen, β)       = Multirate.kaiserlength( transitionWidth, samplerate = numFilters )
+    hLen            = iceil(  hLen/numFilters  ) .* numFilters
+    h               = Multirate.firdes( hLen, cutoffFreq, DSP.kaiser, samplerate = 32, beta = β ) .* numFilters
+
+    @printf( "____ ____ ___      ____ ____ ____ ____ _  _ ___  _    _ _  _ ____\n" )
+    @printf( "|__| |__/ |__]     |__/ |___ [__  |__| |\\/| |__] |    | |\\ | | __\n" )
+    @printf( "|  | |  \\ |__] .   |  \\ |___ ___] |  | |  | |    |___ | | \\| |__]\n" )
+
+    @printf( "\n\tNaive arbitrary resampling\n\t\t" )
+    @time naiveResult = NaiveResamplers.naivefilt( h, x, resampleRate, numFilters )
+
+    @printf( "\n\tNormal arbitrary resampling\n\t\t" )
+    self = Multirate.FIRFilter( h, resampleRate, numFilters )
+    @time statelessResult = filt( self, x )
+
+
+    @printf( "\n\tPiecewise arbitrary resampling\n\t\t" )
+    self           = Multirate.FIRFilter( h, resampleRate, numFilters )
+    piecwiseResult = eltype(x)[]
+    sizehint( piecwiseResult, iceil( length(x)*resampleRate ) )
+    @time for i in 1:length( x )
+        thisY = filt( self, x[i:i] )
+        append!( piecwiseResult, thisY )
+    end
+
+
+    if areApprox( statelessResult, piecwiseResult ) && areApprox( naiveResult, statelessResult ) && areApprox( naiveResult, piecwiseResult )
+        return true
+    end
+
+    commonLen = min( length(naiveResult), length(statelessResult), length(piecwiseResult) )
+    display( [ [1:commonLen] naiveResult[1:commonLen] statelessResult[1:commonLen]  piecwiseResult[1:commonLen] naiveResult[1:commonLen].-statelessResult[1:commonLen] naiveResult[1:commonLen].-piecwiseResult[1:commonLen] ] )
+
+    return false
+end
+
+
+
+
+
+
+
+
 function test_all()
     for interpolation in 1:16,
             decimation in 1:16,
@@ -368,6 +421,7 @@ function test_all()
 
         if num(ratio) != 1 && den(ratio) != 1
             @test test_rational( h, x, ratio )
+            @test test_arbitrary( x, float64(ratio), 32 )
         end
     end
 end
