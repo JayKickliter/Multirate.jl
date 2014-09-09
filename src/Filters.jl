@@ -657,7 +657,6 @@ function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
     inputIdx = kernel.inputDeficit
 
     while inputIdx <= xLen
-        # print( "yCount = $(kernel.yCount), 𝜙Idx = $(kernel.𝜙IdxLower), inputIdx = $inputIdx, α = $(kernel.α), " )
         yLower = zero(T)
         yUpper = zero(T)
 
@@ -685,11 +684,8 @@ function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
         kernel.yLower = yLower
         xIdx += kernel.xIdxUpperOffset
 
-        # println( "x2 idx = $xIdx")
-
         if xIdx <= xLen
             # Compute yUpper
-
             if xIdx < kernel.tapsPer𝜙
                 hIdx = 1
                 for k in xIdx:self.reqDlyLineLen
