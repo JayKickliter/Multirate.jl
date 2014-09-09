@@ -12,7 +12,7 @@ export  hanning,
 
 include( "FIRDesign.jl" )
 export  firdes,
-        kaiserord,
+        kaiserlength,
         FIRResponse,
         LOWPASS,
         HIGPASS,
