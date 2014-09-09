@@ -88,7 +88,7 @@ type FIRArbitrary  <: FIRKernel
     xIdxUpperOffset::Int
     inputDeficit::Int
     α::Float64
-    αLast::Float64
+    αPrevious::Float64
     function FIRArbitrary( h::Vector, resampleRate::Real, numFilters::Integer )
         pfb             = flipud( polyize( h, numFilters ) )
         tapsPer𝜙        = size( pfb )[1]
@@ -104,8 +104,8 @@ type FIRArbitrary  <: FIRKernel
         xIdxDelta       = 0
         xIdxUpperOffset = 0
         α               = 0.0
-        αLast           = 0.0
-        new( pfb, N𝜙, tapsPer𝜙, resampleRate, yCount, xCount, yLower, yUpperStalled, 𝜙IdxLower, 𝜙IdxUpper, xIdxDelta, xIdxUpperOffset, inputDeficit, α, αLast )
+        αPrevious           = 0.0
+        new( pfb, N𝜙, tapsPer𝜙, resampleRate, yCount, xCount, yLower, yUpperStalled, 𝜙IdxLower, 𝜙IdxUpper, xIdxDelta, xIdxUpperOffset, inputDeficit, α, αPrevious )
     end
 end
 
@@ -326,27 +326,11 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRStandard}, x::Vector{T}
     bufLen >= xLen || error( "buffer length must be >= x length" )
 
     for yIdx in 1:criticalYidx                                   # this first loop takes care of filter ramp up and previous dlyLine
-        accumulator = zero(T)
-
-        for k in 1:hLen-yIdx
-            @inbounds accumulator += h[k] * dlyLine[k+yIdx-1]
-        end
-
-        for k in 1:yIdx
-            @inbounds accumulator += h[hLen-yIdx+k] * x[k]
-        end
-
-        @inbounds buffer[yIdx] = accumulator
+        @inbounds buffer[yIdx] = unsafedot( h, dlyLine, x, yIdx )
     end
 
     for yIdx in criticalYidx+1:xLen
-        accumulator = zero(T)
-
-        for k in 1:hLen
-            @inbounds accumulator += h[k] * x[yIdx-hLen+k]
-        end
-
-        @inbounds buffer[yIdx] = accumulator
+        @inbounds buffer[yIdx] = unsafedot( h, x, yIdx )
     end
 
     if xLen >= self.reqDlyLineLen
@@ -389,30 +373,12 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRInterpolator}, x::Vecto
     𝜙        = 1
 
     for yIdx in 1:criticalYidx
-
-        accumulator = zero(T)
-
-        for k in 1:tapsPer𝜙-inputIdx
-            @inbounds accumulator += pfb[k, 𝜙] * dlyLine[k+inputIdx-1]
-        end
-
-        for k in 1:inputIdx
-            @inbounds accumulator += pfb[tapsPer𝜙-inputIdx+k, 𝜙] * x[k]
-        end
-
-        @inbounds buffer[yIdx]  = accumulator
+        @inbounds buffer[yIdx] = unsafedot( pfb, 𝜙, dlyLine, x, inputIdx )
         (𝜙, inputIdx) = 𝜙 == N𝜙 ? ( 1, inputIdx+1 ) : ( 𝜙+1, inputIdx )
     end
 
     for yIdx in criticalYidx+1:outLen
-
-        accumulator = zero(T)
-
-        for k in 1:tapsPer𝜙
-            @inbounds accumulator += pfb[ k, 𝜙 ] * x[ inputIdx - tapsPer𝜙 + k ]
-        end
-
-        @inbounds buffer[yIdx]  = accumulator
+        @inbounds buffer[yIdx] = unsafedot( pfb, 𝜙, x, inputIdx )
         (𝜙, inputIdx) = 𝜙 == N𝜙 ? ( 1, inputIdx+1 ) : ( 𝜙+1, inputIdx )
     end
 
@@ -469,26 +435,12 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRRational}, x::Vector{T}
 
     while inputIdx <= xLen
 
-        accumulator = zero( T )
-        yIdx       += 1
-
+        yIdx += 1
         if inputIdx < kernel.tapsPer𝜙
             hIdx = 1
-            for k in inputIdx:self.reqDlyLineLen
-                @inbounds accumulator += pfb[ hIdx, kernel.𝜙Idx ] * dlyLine[ k ]
-                hIdx += 1
-            end
-
-            for k in 1:inputIdx
-                @inbounds accumulator += pfb[ hIdx, kernel.𝜙Idx ] * x[ k ]
-                hIdx += 1
-            end
+            accumulator = unsafedot( pfb, kernel.𝜙Idx, dlyLine, x, inputIdx )
         else
-            hIdx = 1
-            for k in inputIdx-kernel.tapsPer𝜙+1:inputIdx
-                @inbounds accumulator += pfb[ hIdx, kernel.𝜙Idx ] * x[ k ]
-                hIdx += 1
-            end
+            accumulator = unsafedot( pfb, kernel.𝜙Idx, x, inputIdx )
         end
 
         buffer[ yIdx ] = accumulator
@@ -558,27 +510,13 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRDecimator}, x::Vector{T
         yIdx       += 1
 
         if inputIdx < kernel.hLen
-            hIdx = 1
-            for k in inputIdx:self.reqDlyLineLen
-                @inbounds accumulator += h[ hIdx ] * dlyLine[ k ]
-                hIdx += 1
-            end
-
-            for k in 1:inputIdx
-                @inbounds accumulator += h[ hIdx ] * x[ k ]
-                hIdx += 1
-            end
+            accumulator = unsafedot( h, dlyLine, x, inputIdx )
         else
-            hIdx = 1
-            for k in inputIdx-kernel.hLen+1:inputIdx
-                @inbounds accumulator += h[ hIdx ] * x[ k ]
-                hIdx += 1
-            end
+            accumulator = unsafedot( h, x, inputIdx )
         end
 
         buffer[ yIdx ] = accumulator
-
-        inputIdx   += kernel.decimation
+        inputIdx      += kernel.decimation
     end
 
     kernel.inputDeficit = inputIdx - xLen
@@ -628,7 +566,7 @@ function updatestate!( self::FIRArbitrary )
     xCountCurrent        = self.xCount
     self.xCount          = ifloor( (self.yCount-1)/self.resampleRate )
     self.xIdxDelta       = self.xCount - xCountCurrent
-    self.αLast           = self.α
+    self.αPrevious       = self.α
     self.α               = mod( (self.yCount-1) * self.N𝜙 / self.resampleRate, 1 )
 end
 
@@ -637,84 +575,71 @@ function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
     xLen               = length( x )
     bufLen             = iceil( xLen * kernel.resampleRate ) + 1
     buffer             = similar( x, bufLen )
-    pfb::PFB{T}        = kernel.pfb
-    dlyLine::Vector{T} = self.dlyLine
     bufIdx             = 1
+    dlyLine::Vector{T} = self.dlyLine
+    pfb::PFB{T}        = kernel.pfb
 
+    # In the previous run, did 𝜙IdxUpper wrap around, requiring an extra input that we didn't have yet?
     if kernel.yUpperStalled && xLen >= 1
-        yUpper               = dot( kernel.pfb[:,1], [ self.dlyLine, x[1] ]  )
-        buffer[bufIdx]       = kernel.yLower * (1 - kernel.αLast) + yUpper * kernel.αLast
+        yUpper               = dot( pfb[:,1], [ self.dlyLine, x[1] ]  )
+        buffer[bufIdx]       = kernel.yLower * (1 - kernel.αPrevious) + yUpper * kernel.αPrevious
         kernel.yUpperStalled = false
         bufIdx              += 1
     end
 
+    # Do we have enough input samples to produce one or more output samples?
     if xLen < kernel.inputDeficit
         self.dlyLine = [ self.dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
         kernel.inputDeficit -= xLen
         return buffer[1:bufIdx-1]
     end
 
+    # Skip over input samples that are not needed to produce output results.
+    # We do this by seting inputIdx to inputDeficit which was calculated in the previous run.
+    # InputDeficit is set to 1 when instantiation the FIRArbitrary kernel, that way the first
+    #   input always produces an output.
     inputIdx = kernel.inputDeficit
 
     while inputIdx <= xLen
         yLower = zero(T)
         yUpper = zero(T)
-
-        xIdx = inputIdx
+        xIdx   = inputIdx
 
         # Compute yLower
+        #   As long as inputIdx <= xLen, we can calculate yLower
         if xIdx < kernel.tapsPer𝜙
-            hIdx = 1
-            for k in xIdx:self.reqDlyLineLen
-                yLower += pfb[ hIdx, kernel.𝜙IdxLower ] * dlyLine[ k ]
-                hIdx += 1
-            end
-            for k in 1:xIdx
-                yLower += pfb[ hIdx, kernel.𝜙IdxLower ] * x[ k ]
-                hIdx += 1
-            end
+            yLower = unsafedot( pfb, kernel.𝜙IdxLower, dlyLine, x, xIdx )
         else
-            hIdx = 1
-            for k in xIdx-kernel.tapsPer𝜙+1:xIdx
-                yLower += pfb[ hIdx, kernel.𝜙IdxLower ] * x[ k ]
-                hIdx += 1
-            end
+            yLower = unsafedot( pfb, kernel.𝜙IdxLower, x, xIdx )
         end
 
+        # If 𝜙IdxUpper wraps around, we will need another input sample.
         kernel.yLower = yLower
         xIdx += kernel.xIdxUpperOffset
 
+        # If xIdx was advanced in the previous line due to a 𝜙IdxUpper wrap-around,
+        #   we need to make sure we there are still enough input samples to complete this output.
         if xIdx <= xLen
-            # Compute yUpper
             if xIdx < kernel.tapsPer𝜙
-                hIdx = 1
-                for k in xIdx:self.reqDlyLineLen
-                    yUpper += pfb[ hIdx, kernel.𝜙IdxUpper ] * dlyLine[ k ]
-                    hIdx += 1
-                end
-                for k in 1:xIdx
-                    yUpper += pfb[ hIdx, kernel.𝜙IdxUpper ] * x[ k ]
-                    hIdx += 1
-                end
+                yUpper = unsafedot( pfb, kernel.𝜙IdxUpper, dlyLine, x, xIdx )
             else
-                hIdx = 1
-                for k in xIdx-kernel.tapsPer𝜙+1:xIdx
-                    yUpper += pfb[ hIdx, kernel.𝜙IdxUpper ] * x[ k ]
-                    hIdx += 1
-                end
+                yUpper = unsafedot( pfb, kernel.𝜙IdxUpper, x, xIdx )
             end
             buffer[bufIdx] = yLower * (1 - kernel.α) + yUpper * kernel.α
             bufIdx   += 1
         else
+            # To finish computing this output sample, we need to compute yUpper.
+            # However, we've reached the end of the line.
+            # Set the 'stalled' state in the kernel and finish this output next time.
             kernel.yUpperStalled = true
         end
-
         updatestate!( kernel )
         inputIdx += kernel.xIdxDelta
     end
 
-    resize!( buffer, bufIdx - 1)
-
+    # Did we overestimate needed buffer size?
+    # TODO: Get rid of this by correctly calculating output size.
+    bufLen == bufIdx - 1 || resize!( buffer, bufIdx - 1)
     kernel.inputDeficit = inputIdx - xLen
 
     if xLen >= self.reqDlyLineLen
