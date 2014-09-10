@@ -1,17 +1,16 @@
-resamp     = .85
+resamp     = 1.5
 δ_hr       = 0.0
 δ_acc      = 0.0
 δ_lr       = 0.0
 count      = 0
 numfilters = 32
-Δ          = 1/numfilters
+∇          = inv(resamp)
+tau        = 0.0
 
-while count < 100
+while count < 10
     count = count + 1
-
-    δ_hr  = mod( (count-1) * numfilters / resamp, 1 )
-    δ_lr = δ_lr + Δ
-    δ_lr  = δ_lr >= 1.0 ? δ_lr-1.0 : δ_lr
-    
-    println( "$count: δ_hr = $δ_hr, δ_lr = $δ_lr")
+    tau  += ∇
+    hIdx = floor( tau * numfilters )
+    count % numfilters == 0 && (tau -= 1)
+    println( "$count    $tau, $hIdx")
 end
