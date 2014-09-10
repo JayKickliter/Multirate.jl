@@ -104,7 +104,7 @@ type FIRArbitrary  <: FIRKernel
         xIdxDelta       = 0
         xIdxUpperOffset = 0
         α               = 0.0
-        αPrevious           = 0.0
+        αPrevious       = 0.0
         new( pfb, N𝜙, tapsPer𝜙, resampleRate, yCount, xCount, yLower, yUpperStalled, 𝜙IdxLower, 𝜙IdxUpper, xIdxDelta, xIdxUpperOffset, inputDeficit, α, αPrevious )
     end
 end
@@ -114,44 +114,44 @@ end
 # FIRFilter - the kernel does the heavy lifting
 type FIRFilter{Tk<:FIRKernel} <: Filter
     kernel::Tk
-    dlyLine::Vector
-    reqDlyLineLen::Int
+    history::Vector
+    historyLen::Int
 end
 
 function FIRFilter( h::Vector, resampleRatio::Rational = 1//1 )
     interpolation = num( resampleRatio )
     decimation    = den( resampleRatio )
-    reqDlyLineLen = 0
+    historyLen = 0
 
     if resampleRatio == 1                                     # single-rate
         kernel        = FIRStandard( h )
-        reqDlyLineLen = kernel.hLen - 1
+        historyLen = kernel.hLen - 1
     elseif interpolation == 1                                 # decimate
         kernel        = FIRDecimator( h, decimation )
-        reqDlyLineLen = kernel.hLen - 1
+        historyLen = kernel.hLen - 1
     elseif decimation == 1                                    # interpolate
         kernel        = FIRInterpolator( h, interpolation )
-        reqDlyLineLen = kernel.tapsPer𝜙 - 1
+        historyLen = kernel.tapsPer𝜙 - 1
     else                                                      # rational
         kernel        = FIRRational( h, resampleRatio )
-        reqDlyLineLen = kernel.tapsPer𝜙 - 1
+        historyLen = kernel.tapsPer𝜙 - 1
     end
 
-    dlyLine = zeros( reqDlyLineLen )
+    history = zeros( historyLen )
 
-    FIRFilter( kernel, dlyLine, reqDlyLineLen )
+    FIRFilter( kernel, history, historyLen )
 end
 
 function FIRFilter( h::Vector, resampleRate::FloatingPoint, numFilters::Integer = 32 )
     resampleRate > 0.0 || error( "resampleRate must be greater than 0" )
 
     kernel        = FIRArbitrary( h, resampleRate, numFilters )
-    reqDlyLineLen = kernel.tapsPer𝜙 - 1
-    dlyLine       = zeros( reqDlyLineLen )
+    historyLen = kernel.tapsPer𝜙 - 1
+    history       = zeros( historyLen )
 
     updatestate!( kernel )
 
-    FIRFilter( kernel, dlyLine, reqDlyLineLen )
+    FIRFilter( kernel, history, historyLen )
 end
 
 
@@ -173,7 +173,7 @@ reset( self::FIRRational ) = self.𝜙Idx = 1
 
 # For FIRFilter, set delay line to zeros of same tyoe and required length
 function reset( self::FIRFilter )
-    self.dlyLine = zeros( eltype( self.dlyLine ), self.reqDlyLineLen )
+    self.history = zeros( eltype( self.history ), self.historyLen )
     reset( self.kernel )
     return self
 end
@@ -314,10 +314,10 @@ end
 #==============================================================================#
 
 function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRStandard}, x::Vector{T} )
-    dlyLine::Vector{T} = self.dlyLine
+    history::Vector{T} = self.history
     h::Vector{T}       = self.kernel.h
     hLen               = self.kernel.hLen
-    reqDlyLineLen      = self.reqDlyLineLen
+    historyLen      = self.historyLen
     bufLen             = length( buffer )
     xLen               = length( x )
     outLen             = xLen
@@ -325,20 +325,20 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRStandard}, x::Vector{T}
 
     bufLen >= xLen || error( "buffer length must be >= x length" )
 
-    for yIdx in 1:criticalYidx                                   # this first loop takes care of filter ramp up and previous dlyLine
-        @inbounds buffer[yIdx] = unsafedot( h, dlyLine, x, yIdx )
+    for yIdx in 1:criticalYidx                                   # this first loop takes care of filter ramp up and previous history
+        @inbounds buffer[yIdx] = unsafedot( h, history, x, yIdx )
     end
 
     for yIdx in criticalYidx+1:xLen
         @inbounds buffer[yIdx] = unsafedot( h, x, yIdx )
     end
 
-    if xLen >= self.reqDlyLineLen
-        copy!( dlyLine, 1, x, xLen - self.reqDlyLineLen + 1, self.reqDlyLineLen )
+    if xLen >= self.historyLen
+        copy!( history, 1, x, xLen - self.historyLen + 1, self.historyLen )
     else
-        dlyLine = [ dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
+        history = [ history, x ][ end - self.historyLen + 1: end ]
     end
-    self.dlyLine = dlyLine
+    self.history = history
 
     return buffer
 end
@@ -357,15 +357,15 @@ end
 
 function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRInterpolator}, x::Vector{T} )
     pfb::PFB{T}        = self.kernel.pfb
-    dlyLine::Vector{T} = self.dlyLine
+    history::Vector{T} = self.history
     interpolation      = self.kernel.interpolation
     N𝜙                 = self.kernel.N𝜙
     tapsPer𝜙           = self.kernel.tapsPer𝜙
     xLen               = length( x )
     bufLen             = length( buffer )
-    reqDlyLineLen      = self.reqDlyLineLen
+    historyLen      = self.historyLen
     outLen             = outputlength( self, xLen )
-    criticalYidx       = min( reqDlyLineLen*interpolation, outLen )
+    criticalYidx       = min( historyLen*interpolation, outLen )
 
     bufLen >= outLen || error( "length( buffer ) must be >= interpolation * length(x)")
 
@@ -373,7 +373,7 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRInterpolator}, x::Vecto
     𝜙        = 1
 
     for yIdx in 1:criticalYidx
-        @inbounds buffer[yIdx] = unsafedot( pfb, 𝜙, dlyLine, x, inputIdx )
+        @inbounds buffer[yIdx] = unsafedot( pfb, 𝜙, history, x, inputIdx )
         (𝜙, inputIdx) = 𝜙 == N𝜙 ? ( 1, inputIdx+1 ) : ( 𝜙+1, inputIdx )
     end
 
@@ -382,12 +382,12 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRInterpolator}, x::Vecto
         (𝜙, inputIdx) = 𝜙 == N𝜙 ? ( 1, inputIdx+1 ) : ( 𝜙+1, inputIdx )
     end
 
-    if xLen >= self.reqDlyLineLen
-        copy!( dlyLine, 1, x, xLen - self.reqDlyLineLen + 1, self.reqDlyLineLen )
+    if xLen >= self.historyLen
+        copy!( history, 1, x, xLen - self.historyLen + 1, self.historyLen )
     else
-        dlyLine = [ dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
+        history = [ history, x ][ end - self.historyLen + 1: end ]
     end
-    self.dlyLine = dlyLine
+    self.history = history
 
 
     return buffer
@@ -415,7 +415,7 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRRational}, x::Vector{T}
     bufLen = length( buffer )
 
     if xLen < kernel.inputDeficit
-        self.dlyLine = [ self.dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
+        self.history = [ self.history, x ][ end - self.historyLen + 1: end ]
         kernel.inputDeficit -= xLen
         return T[]
     end
@@ -424,7 +424,7 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRRational}, x::Vector{T}
     bufLen >= outLen || error( "buffer is too small" )
 
     pfb::PFB{T}        = kernel.pfb
-    dlyLine::Vector{T} = self.dlyLine
+    history::Vector{T} = self.history
     interpolation      = num( kernel.ratio )
     decimation         = den( kernel.ratio )
     𝜙IdxStepSize       = mod( decimation, interpolation )
@@ -438,7 +438,7 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRRational}, x::Vector{T}
         yIdx += 1
         if inputIdx < kernel.tapsPer𝜙
             hIdx = 1
-            accumulator = unsafedot( pfb, kernel.𝜙Idx, dlyLine, x, inputIdx )
+            accumulator = unsafedot( pfb, kernel.𝜙Idx, history, x, inputIdx )
         else
             accumulator = unsafedot( pfb, kernel.𝜙Idx, x, inputIdx )
         end
@@ -451,12 +451,12 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRRational}, x::Vector{T}
 
     kernel.inputDeficit = inputIdx - xLen
 
-    if xLen >= self.reqDlyLineLen
-        copy!( dlyLine, 1, x, xLen - self.reqDlyLineLen + 1, self.reqDlyLineLen )
+    if xLen >= self.historyLen
+        copy!( history, 1, x, xLen - self.historyLen + 1, self.historyLen )
     else
-        dlyLine = [ dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
+        history = [ history, x ][ end - self.historyLen + 1: end ]
     end
-    self.dlyLine = dlyLine
+    self.history = history
 
     return yIdx
 end
@@ -466,7 +466,7 @@ function filt{T}( self::FIRFilter{FIRRational}, x::Vector{T} )
     xLen   = length( x )
 
     if xLen < kernel.inputDeficit
-        self.dlyLine = [ self.dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
+        self.history = [ self.history, x ][ end - self.historyLen + 1: end ]
         kernel.inputDeficit -= xLen
         return T[]
     end
@@ -492,7 +492,7 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRDecimator}, x::Vector{T
     xLen   = length( x )
 
     if xLen < kernel.inputDeficit
-        self.dlyLine = [ self.dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
+        self.history = [ self.history, x ][ end - self.historyLen + 1: end ]
         kernel.inputDeficit -= xLen
         return T[]
     end
@@ -500,7 +500,7 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRDecimator}, x::Vector{T
     outLen = outputlength( self, xLen )
 
     h::Vector{T}       = kernel.h
-    dlyLine::Vector{T} = self.dlyLine
+    history::Vector{T} = self.history
     inputIdx           = kernel.inputDeficit
     yIdx               = 0
 
@@ -510,7 +510,7 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRDecimator}, x::Vector{T
         yIdx       += 1
 
         if inputIdx < kernel.hLen
-            accumulator = unsafedot( h, dlyLine, x, inputIdx )
+            accumulator = unsafedot( h, history, x, inputIdx )
         else
             accumulator = unsafedot( h, x, inputIdx )
         end
@@ -521,12 +521,12 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRDecimator}, x::Vector{T
 
     kernel.inputDeficit = inputIdx - xLen
 
-    if xLen >= self.reqDlyLineLen
-        copy!( dlyLine, 1, x, xLen - self.reqDlyLineLen + 1, self.reqDlyLineLen )
+    if xLen >= self.historyLen
+        copy!( history, 1, x, xLen - self.historyLen + 1, self.historyLen )
     else
-        dlyLine = [ dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
+        history = [ history, x ][ end - self.historyLen + 1: end ]
     end
-    self.dlyLine = dlyLine
+    self.history = history
 
 
     return yIdx
@@ -537,7 +537,7 @@ function filt{T}( self::FIRFilter{FIRDecimator}, x::Vector{T} )
     xLen   = length( x )
 
     if xLen < kernel.inputDeficit
-        self.dlyLine = [ self.dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
+        self.history = [ self.history, x ][ end - self.historyLen + 1: end ]
         kernel.inputDeficit -= xLen
         return T[]
     end
@@ -576,12 +576,12 @@ function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
     bufLen             = iceil( xLen * kernel.resampleRate ) + 1
     buffer             = similar( x, bufLen )
     bufIdx             = 1
-    dlyLine::Vector{T} = self.dlyLine
+    history::Vector{T} = self.history
     pfb::PFB{T}        = kernel.pfb
 
     # In the previous run, did 𝜙IdxUpper wrap around, requiring an extra input that we didn't have yet?
     if kernel.yUpperStalled && xLen >= 1
-        yUpper               = dot( pfb[:,1], [ self.dlyLine, x[1] ]  )
+        yUpper               = dot( pfb[:,1], [ self.history, x[1] ]  )
         buffer[bufIdx]       = kernel.yLower * (1 - kernel.αPrevious) + yUpper * kernel.αPrevious
         kernel.yUpperStalled = false
         bufIdx              += 1
@@ -589,7 +589,7 @@ function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
 
     # Do we have enough input samples to produce one or more output samples?
     if xLen < kernel.inputDeficit
-        self.dlyLine = [ self.dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
+        self.history = [ self.history, x ][ end - self.historyLen + 1: end ]
         kernel.inputDeficit -= xLen
         return buffer[1:bufIdx-1]
     end
@@ -608,7 +608,7 @@ function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
         # Compute yLower
         #   As long as inputIdx <= xLen, we can calculate yLower
         if xIdx < kernel.tapsPer𝜙
-            yLower = unsafedot( pfb, kernel.𝜙IdxLower, dlyLine, x, xIdx )
+            yLower = unsafedot( pfb, kernel.𝜙IdxLower, history, x, xIdx )
         else
             yLower = unsafedot( pfb, kernel.𝜙IdxLower, x, xIdx )
         end
@@ -621,7 +621,7 @@ function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
         #   we need to make sure we there are still enough input samples to complete this output.
         if xIdx <= xLen
             if xIdx < kernel.tapsPer𝜙
-                yUpper = unsafedot( pfb, kernel.𝜙IdxUpper, dlyLine, x, xIdx )
+                yUpper = unsafedot( pfb, kernel.𝜙IdxUpper, history, x, xIdx )
             else
                 yUpper = unsafedot( pfb, kernel.𝜙IdxUpper, x, xIdx )
             end
@@ -642,12 +642,12 @@ function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
     bufLen == bufIdx - 1 || resize!( buffer, bufIdx - 1)
     kernel.inputDeficit = inputIdx - xLen
 
-    if xLen >= self.reqDlyLineLen
-        copy!( dlyLine, 1, x, xLen - self.reqDlyLineLen + 1, self.reqDlyLineLen )
+    if xLen >= self.historyLen
+        copy!( history, 1, x, xLen - self.historyLen + 1, self.historyLen )
     else
-        dlyLine = [ dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
+        history = [ history, x ][ end - self.historyLen + 1: end ]
     end
-    self.dlyLine = dlyLine
+    self.history = history
 
     return buffer
 end
