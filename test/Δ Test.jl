@@ -12,8 +12,8 @@ type ArbResamplerState
         N𝜙           = N𝜙
         ∇            = 1.0/rate
         𝜙Accumulator = 0.0
-        𝜙IdxVirtual  = 0.0
-        𝜙Idx         = 0.0
+        𝜙IdxVirtual  = 1.0
+        𝜙Idx         = 1
         Δ            = 0.0
         new( rate, N𝜙, ∇, 𝜙Accumulator, 𝜙Idx, Δ, 𝜙IdxVirtual )
     end
@@ -21,12 +21,12 @@ end
 
 function increment!( self::ArbResamplerState )
         self.𝜙Accumulator += self.∇
-
-        if self.𝜙Accumulator > 1.0
-            self.𝜙Accumulator = mod(self.𝜙Accumulator, 1.0) 
+        
+        if self.𝜙Accumulator >= 1
+            self.𝜙Accumulator = mod( self.𝜙Accumulator, 1 )
         end
-        display(self.𝜙Accumulator)
-        self.𝜙IdxVirtual = self.𝜙Accumulator * self.N𝜙
+
+        self.𝜙IdxVirtual = self.𝜙Accumulator * self.N𝜙 + 1
         self.𝜙Idx        = ifloor( self.𝜙IdxVirtual )
         self.Δ           = self.𝜙IdxVirtual - self.𝜙Idx
         
@@ -34,15 +34,15 @@ function increment!( self::ArbResamplerState )
 end
 
 
-resamp = 10
-N𝜙     = 10
+resamp = 1.0
+N𝜙     = 32
 yCount = 0
 xCount = 0
 self   = ArbResamplerState( resamp, N𝜙 )
 
-while xCount < 30
+while xCount < 60
     xCount += 1
-    @printf( "%d: \t𝜙Accumulator = %f\t𝜙IdxVirtual = %f\t𝜙Idx = %f\tΔ = %f\n", xCount, self.𝜙Accumulator, self.𝜙IdxVirtual, self.𝜙Idx, self.Δ)
+    @printf( "%d:\t𝜙Accumulator = %f\t\t𝜙IdxVirtual = %f\t\t𝜙Idx = %d\t\tΔ = %f\n", xCount, self.𝜙Accumulator, self.𝜙IdxVirtual, self.𝜙Idx, self.Δ)
     increment!( self )
 end
 #
