@@ -3,6 +3,7 @@ type ArbResamplerState
     rate::Float64
     N𝜙::Int
     Δ::Float64
+    counter::Float64
     𝜙Accumulator::Float64
     𝜙Idx::Int
     δ::Float64
@@ -12,39 +13,42 @@ type ArbResamplerState
         rate         = rate
         N𝜙           = N𝜙
         Δ            = 1.0/rate
-        𝜙Accumulator = 0.0
-        𝜙IdxVirtual  = 1.0
+        counter      = 0
+        𝜙Accumulator = 0
+        𝜙IdxVirtual  = 1
         𝜙Idx         = 1
-        δ            = 0.0
+        δ            = 0
         yLower       = 0
-        new( rate, N𝜙, Δ, 𝜙Accumulator, 𝜙Idx, δ, 𝜙IdxVirtual, yLower )
+        self = new( rate, N𝜙, Δ, counter, 𝜙Accumulator, 𝜙Idx, δ, 𝜙IdxVirtual, yLower )
+        # update!( self )
+        self
     end
 end
 
 function update!( self::ArbResamplerState )
-        self.𝜙Accumulator += self.Δ
-        
-        if self.𝜙Accumulator >= 1
-            self.𝜙Accumulator = mod( self.𝜙Accumulator, 1 )
-        end
+    self.counter += self.Δ
+    self.𝜙Accumulator += self.Δ
+    if self.𝜙Accumulator >= 1
+        self.𝜙Accumulator = mod( self.𝜙Accumulator, 1 )
+        self.counter += 1
+    end
 
-        self.𝜙IdxVirtual = self.𝜙Accumulator * self.N𝜙 + 1
-        self.𝜙Idx        = ifloor( self.𝜙IdxVirtual )
-        self.δ           = self.𝜙IdxVirtual - self.𝜙Idx
-        
-        nothing
+    self.𝜙IdxVirtual = self.𝜙Accumulator * ( self.N𝜙 - 1 ) + 1
+    self.𝜙Idx        = ifloor( self.𝜙IdxVirtual )
+    self.δ           = self.𝜙IdxVirtual - self.𝜙Idx
+    self
 end
 
 
-resamp = 1.0
-N𝜙     = 32
+resamp = 2
+N𝜙     = 10
 yCount = 0
 xCount = 0
 self   = ArbResamplerState( resamp, N𝜙 )
 
-while xCount < 60
+while xCount < 11
     xCount += 1
-    @printf( "%d:\t𝜙Accumulator = %f\t\t𝜙IdxVirtual = %f\t\t𝜙Idx = %d\t\tδ = %f\n", xCount, self.𝜙Accumulator, self.𝜙IdxVirtual, self.𝜙Idx, self.δ)
+    @printf( "%d:\tcounter = %f, 𝜙Accumulator = %f, 𝜙IdxVirtual = %f, 𝜙Idx = %d, δ = %f\n", xCount, self.counter, self.𝜙Accumulator, self.𝜙IdxVirtual, self.𝜙Idx, self.δ)
     update!( self )
 end
 #
