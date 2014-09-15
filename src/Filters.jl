@@ -317,7 +317,7 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRStandard}, x::Vector{T}
     history::Vector{T} = self.history
     h::Vector{T}       = self.kernel.h
     hLen               = self.kernel.hLen
-    historyLen      = self.historyLen
+    historyLen         = self.historyLen
     bufLen             = length( buffer )
     xLen               = length( x )
     outLen             = xLen
@@ -363,7 +363,7 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRInterpolator}, x::Vecto
     tapsPer𝜙           = self.kernel.tapsPer𝜙
     xLen               = length( x )
     bufLen             = length( buffer )
-    historyLen      = self.historyLen
+    historyLen         = self.historyLen
     outLen             = outputlength( self, xLen )
     criticalYidx       = min( historyLen*interpolation, outLen )
 
