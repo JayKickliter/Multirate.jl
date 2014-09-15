@@ -87,8 +87,8 @@ type FIRArbitrary  <: FIRKernel
     xIdxDelta::Int
     xIdxUpperOffset::Int
     inputDeficit::Int
-    α::Float64
-    αPrevious::Float64
+    Δ::Float64
+    ΔPrevious::Float64
     function FIRArbitrary( h::Vector, resampleRate::Real, numFilters::Integer )
         pfb             = flipud( polyize( h, numFilters ) )
         tapsPer𝜙        = size( pfb )[1]
@@ -103,9 +103,9 @@ type FIRArbitrary  <: FIRKernel
         inputDeficit    = 1
         xIdxDelta       = 0
         xIdxUpperOffset = 0
-        α               = 0.0
-        αPrevious       = 0.0
-        new( pfb, N𝜙, tapsPer𝜙, resampleRate, yCount, xCount, yLower, yUpperStalled, 𝜙IdxLower, 𝜙IdxUpper, xIdxDelta, xIdxUpperOffset, inputDeficit, α, αPrevious )
+        Δ               = 0.0
+        ΔPrevious       = 0.0
+        new( pfb, N𝜙, tapsPer𝜙, resampleRate, yCount, xCount, yLower, yUpperStalled, 𝜙IdxLower, 𝜙IdxUpper, xIdxDelta, xIdxUpperOffset, inputDeficit, Δ, ΔPrevious )
     end
 end
 
@@ -566,8 +566,8 @@ function updatestate!( self::FIRArbitrary )
     xCountCurrent        = self.xCount
     self.xCount          = ifloor( (self.yCount-1)/self.resampleRate )
     self.xIdxDelta       = self.xCount - xCountCurrent
-    self.αPrevious       = self.α
-    self.α               = mod( (self.yCount-1) * self.N𝜙 / self.resampleRate, 1 )
+    self.ΔPrevious       = self.Δ
+    self.Δ               = mod( (self.yCount-1) * self.N𝜙 / self.resampleRate, 1 )
 end
 
 function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
@@ -582,7 +582,7 @@ function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
     # In the previous run, did 𝜙IdxUpper wrap around, requiring an extra input that we didn't have yet?
     if kernel.yUpperStalled && xLen >= 1
         yUpper               = dot( pfb[:,1], [ self.history, x[1] ]  )
-        buffer[bufIdx]       = kernel.yLower * (1 - kernel.αPrevious) + yUpper * kernel.αPrevious
+        buffer[bufIdx]       = kernel.yLower * (1 - kernel.ΔPrevious) + yUpper * kernel.ΔPrevious
         kernel.yUpperStalled = false
         bufIdx              += 1
     end
@@ -625,7 +625,7 @@ function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
             else
                 yUpper = unsafedot( pfb, kernel.𝜙IdxUpper, x, xIdx )
             end
-            buffer[bufIdx] = yLower * (1 - kernel.α) + yUpper * kernel.α
+            buffer[bufIdx] = yLower * (1 - kernel.Δ) + yUpper * kernel.Δ
             bufIdx   += 1
         else
             # To finish computing this output sample, we need to compute yUpper.
