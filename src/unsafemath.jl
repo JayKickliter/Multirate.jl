@@ -53,3 +53,27 @@ function unsafedot( a::Vector, b::Vector, c::Vector, cLastIdx::Integer )
 
     return dotprod
 end
+
+
+
+
+function lshiftin!{T}( a::Vector{T}, b::Vector{T} )
+    aLen = length( a )
+    bLen = length( b )
+
+    if bLen >= aLen
+        copy!( a, 1, b, bLen - aLen + 1, aLen )
+    else
+
+        for i in 1:aLen-bLen
+            @inbounds a[i] = a[i+bLen]
+        end
+        bIdx = 1
+        for i in aLen-bLen+1:aLen
+            @inbounds a[i] = b[bIdx]
+            bIdx += 1
+        end
+    end
+
+    return a
+end

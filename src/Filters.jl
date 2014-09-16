@@ -128,7 +128,7 @@ end
 function FIRFilter( h::Vector, resampleRatio::Rational = 1//1 )
     interpolation = num( resampleRatio )
     decimation    = den( resampleRatio )
-    historyLen = 0
+    historyLen    = 0
 
     if resampleRatio == 1                                     # single-rate
         kernel        = FIRStandard( h )
@@ -219,6 +219,9 @@ function polyize{T}( h::Vector{T}, numFilters::Integer )
     hLenPer𝜙  = int( hLen/numFilters )
     pfb       = reshape( h, numFilters, hLenPer𝜙 )'
 end
+
+
+
 
 #==============================================================================#
 #               ____ _  _ ___ ___  _  _ ___    _    ____ _  _                  #
@@ -340,13 +343,8 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRStandard}, x::Vector{T}
         @inbounds buffer[yIdx] = unsafedot( h, x, yIdx )
     end
 
-    if xLen >= self.historyLen
-        copy!( history, 1, x, xLen - self.historyLen + 1, self.historyLen )
-    else
-        history = [ history, x ][ end - self.historyLen + 1: end ]
-    end
-    self.history = history
-
+    self.history = lshiftin!( history, x )
+    
     return buffer
 end
 
@@ -354,6 +352,8 @@ function filt{T}( self::FIRFilter{FIRStandard}, x::Vector{T} )
     buffer = zeros( eltype(x), length(x) )
     filt!( buffer, self, x )
 end
+
+
 
 
 #==============================================================================#
@@ -389,14 +389,8 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRInterpolator}, x::Vecto
         (𝜙, inputIdx) = 𝜙 == N𝜙 ? ( 1, inputIdx+1 ) : ( 𝜙+1, inputIdx )
     end
 
-    if xLen >= self.historyLen
-        copy!( history, 1, x, xLen - self.historyLen + 1, self.historyLen )
-    else
-        history = [ history, x ][ end - self.historyLen + 1: end ]
-    end
-    self.history = history
-
-
+    self.history = lshiftin!( history, x )
+    
     return buffer
 end
 
@@ -458,13 +452,8 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRRational}, x::Vector{T}
 
     kernel.inputDeficit = inputIdx - xLen
 
-    if xLen >= self.historyLen
-        copy!( history, 1, x, xLen - self.historyLen + 1, self.historyLen )
-    else
-        history = [ history, x ][ end - self.historyLen + 1: end ]
-    end
-    self.history = history
-
+    self.history = lshiftin!( history, x )
+    
     return yIdx
 end
 
@@ -528,13 +517,7 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRDecimator}, x::Vector{T
 
     kernel.inputDeficit = inputIdx - xLen
 
-    if xLen >= self.historyLen
-        copy!( history, 1, x, xLen - self.historyLen + 1, self.historyLen )
-    else
-        history = [ history, x ][ end - self.historyLen + 1: end ]
-    end
-    self.history = history
-
+    self.history = lshiftin!( history, x )
 
     return yIdx
 end
@@ -649,12 +632,7 @@ function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
     bufLen == bufIdx - 1 || resize!( buffer, bufIdx - 1)
     kernel.inputDeficit = inputIdx - xLen
 
-    if xLen >= self.historyLen
-        copy!( history, 1, x, xLen - self.historyLen + 1, self.historyLen )
-    else
-        history = [ history, x ][ end - self.historyLen + 1: end ]
-    end
-    self.history = history
+    self.history = lshiftin!( history, x )
 
     return buffer
 end
