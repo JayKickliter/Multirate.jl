@@ -56,7 +56,8 @@ end
 
 
 
-
+# Shifts b into the end a.
+# a = [ a, b ][1:length(a)]
 function lshiftin!{T}( a::Vector{T}, b::Vector{T} )
     aLen = length( a )
     bLen = length( b )
