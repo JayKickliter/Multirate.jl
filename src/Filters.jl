@@ -13,12 +13,12 @@ abstract FIRKernel
 type FIRStandard <: FIRKernel
     h::Vector
     hLen::Int
-end
-
-function FIRStandard( h::Vector )
-    h    = flipud( h )
-    hLen = length( h )
-    FIRStandard( h, hLen )
+    function FIRStandard( h::Vector )
+        self      = new()
+        self.h    = flipud( h )
+        self.hLen = length( h )
+        return self
+    end
 end
 
 
@@ -28,12 +28,14 @@ type FIRInterpolator <: FIRKernel
     interpolation::Int
     N𝜙::Int
     tapsPer𝜙::Int
-end
-
-function FIRInterpolator( h::Vector, interpolation::Integer )
-    pfb              = flipud( polyize( h, interpolation ) )
-    ( tapsPer𝜙, N𝜙 ) = size( pfb )
-    FIRInterpolator( pfb, interpolation, N𝜙, tapsPer𝜙 )
+    function FIRInterpolator( h::Vector, interpolation::Integer )
+        self               = new()
+        self.pfb           = flipud( polyize( h, interpolation ) )
+        self.tapsPer𝜙      = size( self.pfb )[1]
+        self.N𝜙            = size( self.pfb )[2]
+        self.interpolation = interpolation
+        return self
+    end
 end
 
 
@@ -43,12 +45,14 @@ type FIRDecimator <: FIRKernel
     hLen::Int
     decimation::Int
     inputDeficit::Int
-end
-
-function FIRDecimator( h::Vector, decimation::Integer )
-    h    = flipud( h )
-    hLen = length( h )
-    FIRDecimator( h, hLen, decimation, 1 )
+    function FIRDecimator( h::Vector, decimation::Integer )
+        self              = new()
+        self.h            = flipud( h )
+        self.hLen         = length( h )
+        self.decimation   = decimation
+        self.inputDeficit = 1
+        return self
+    end
 end
 
 
@@ -61,14 +65,17 @@ type FIRRational  <: FIRKernel
     criticalYidx::Int
     𝜙Idx::Int
     inputDeficit::Int
-end
-
-function FIRRational( h::Vector, ratio::Rational )
-    interpolation    = num( ratio )
-    pfb              = flipud( polyize( h, interpolation ) )
-    ( tapsPer𝜙, N𝜙 ) = size( pfb )
-    criticalYidx     = ifloor( tapsPer𝜙 * ratio )
-    FIRRational( pfb, ratio, N𝜙, tapsPer𝜙, criticalYidx, 1, 1 )
+    function FIRRational( h::Vector, ratio::Rational )
+        self              = new()
+        self.pfb          = flipud( polyize( h, num(ratio) ))
+        self.ratio        = ratio
+        self.N𝜙           = size( self.pfb )[2]
+        self.tapsPer𝜙     = size( self.pfb )[1]
+        self.criticalYidx = ifloor( self.tapsPer𝜙 * ratio )
+        self.𝜙Idx         = 1
+        self.inputDeficit = 1
+        return self
+    end
 end
 
 
@@ -90,25 +97,25 @@ type FIRArbitrary  <: FIRKernel
     Δ::Float64
     ΔPrevious::Float64
     function FIRArbitrary( h::Vector, resampleRate::Real, numFilters::Integer )
-        pfb             = flipud( polyize( h, numFilters ) )
-        tapsPer𝜙        = size( pfb )[1]
-        N𝜙              = size( pfb )[2]
-        resampleRate    = resampleRate
-        yCount          = 0
-        xCount          = 0
-        yLower          = NaN
-        yUpperStalled   = false
-        𝜙IdxLower       = 0
-        𝜙IdxUpper       = 0
-        inputDeficit    = 1
-        xIdxDelta       = 0
-        xIdxUpperOffset = 0
-        Δ               = 0.0
-        ΔPrevious       = 0.0
-        new( pfb, N𝜙, tapsPer𝜙, resampleRate, yCount, xCount, yLower, yUpperStalled, 𝜙IdxLower, 𝜙IdxUpper, xIdxDelta, xIdxUpperOffset, inputDeficit, Δ, ΔPrevious )
+        self                 = new()
+        self.pfb             = flipud( polyize( h, numFilters ) )
+        self.tapsPer𝜙        = size( self.pfb )[1]
+        self.N𝜙              = size( self.pfb )[2]
+        self.resampleRate    = resampleRate
+        self.yCount          = 0
+        self.xCount          = 0
+        self.yLower          = NaN
+        self.yUpperStalled   = false
+        self.𝜙IdxLower       = 0
+        self.𝜙IdxUpper       = 0
+        self.inputDeficit    = 1
+        self.xIdxDelta       = 0
+        self.xIdxUpperOffset = 0
+        self.Δ               = 0.0
+        self.ΔPrevious       = 0.0
+        return self
     end
 end
-
 
 
 # FIRFilter - the kernel does the heavy lifting
@@ -145,9 +152,9 @@ end
 function FIRFilter( h::Vector, resampleRate::FloatingPoint, numFilters::Integer = 32 )
     resampleRate > 0.0 || error( "resampleRate must be greater than 0" )
 
-    kernel        = FIRArbitrary( h, resampleRate, numFilters )
+    kernel     = FIRArbitrary( h, resampleRate, numFilters )
     historyLen = kernel.tapsPer𝜙 - 1
-    history       = zeros( historyLen )
+    history    = zeros( historyLen )
 
     updatestate!( kernel )
 
