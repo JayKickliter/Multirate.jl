@@ -430,7 +430,6 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRRational}, x::Vector{T}
     decimation         = den( kernel.ratio )
     𝜙IdxStepSize       = mod( decimation, interpolation )
     critical𝜙Idx       = kernel.N𝜙 - 𝜙IdxStepSize
-
     inputIdx           = kernel.inputDeficit
     yIdx               = 0
 
