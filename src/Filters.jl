@@ -104,7 +104,7 @@ type FIRArbitrary  <: FIRKernel
         self.resampleRate    = resampleRate
         self.yCount          = 0
         self.xCount          = 0
-        self.yLower          = NaN
+        self.yLower          = 0
         self.yUpperStalled   = false
         self.𝜙IdxLower       = 0
         self.𝜙IdxUpper       = 0
@@ -344,7 +344,7 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRStandard}, x::Vector{T}
     end
 
     self.history = lshiftin!( history, x )
-    
+
     return buffer
 end
 
@@ -390,7 +390,7 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRInterpolator}, x::Vecto
     end
 
     self.history = lshiftin!( history, x )
-    
+
     return buffer
 end
 
@@ -411,12 +411,12 @@ end
 #==============================================================================#
 
 function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRRational}, x::Vector{T} )
-    kernel = self.kernel
-    xLen   = length( x )
-    bufLen = length( buffer )
+    kernel             = self.kernel
+    xLen               = length( x )
+    bufLen             = length( buffer )
 
     if xLen < kernel.inputDeficit
-        self.history = [ self.history, x ][ end - self.historyLen + 1: end ]
+        self.history = lshiftin!( history, x )
         kernel.inputDeficit -= xLen
         return T[]
     end
@@ -451,9 +451,8 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRRational}, x::Vector{T}
     end
 
     kernel.inputDeficit = inputIdx - xLen
+    self.history        = lshiftin!( history, x )
 
-    self.history = lshiftin!( history, x )
-    
     return yIdx
 end
 
@@ -462,7 +461,8 @@ function filt{T}( self::FIRFilter{FIRRational}, x::Vector{T} )
     xLen   = length( x )
 
     if xLen < kernel.inputDeficit
-        self.history = [ self.history, x ][ end - self.historyLen + 1: end ]
+        history::Vector{T} = self.history
+        self.history = lshiftin!( history, x )
         kernel.inputDeficit -= xLen
         return T[]
     end
@@ -488,20 +488,18 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRDecimator}, x::Vector{T
     xLen   = length( x )
 
     if xLen < kernel.inputDeficit
-        self.history = [ self.history, x ][ end - self.historyLen + 1: end ]
+        self.history = lshiftin!( history, x )
         kernel.inputDeficit -= xLen
         return T[]
     end
 
     outLen = outputlength( self, xLen )
-
-    h::Vector{T}       = kernel.h
     history::Vector{T} = self.history
+    h::Vector{T}       = kernel.h
     inputIdx           = kernel.inputDeficit
     yIdx               = 0
 
     while inputIdx <= xLen
-
         accumulator = zero( T )
         yIdx       += 1
 
@@ -516,18 +514,18 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRDecimator}, x::Vector{T
     end
 
     kernel.inputDeficit = inputIdx - xLen
-
-    self.history = lshiftin!( history, x )
+    self.history        = lshiftin!( history, x )
 
     return yIdx
 end
 
 function filt{T}( self::FIRFilter{FIRDecimator}, x::Vector{T} )
-    kernel = self.kernel
-    xLen   = length( x )
+    kernel             = self.kernel
+    xLen               = length( x )
 
     if xLen < kernel.inputDeficit
-        self.history = [ self.history, x ][ end - self.historyLen + 1: end ]
+        history::Vector{T} = self.history
+        self.history       = lshiftin!( history, x )
         kernel.inputDeficit -= xLen
         return T[]
     end
@@ -579,7 +577,7 @@ function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
 
     # Do we have enough input samples to produce one or more output samples?
     if xLen < kernel.inputDeficit
-        self.history = [ self.history, x ][ end - self.historyLen + 1: end ]
+        self.history = lshiftin!( history, x )
         kernel.inputDeficit -= xLen
         return buffer[1:bufIdx-1]
     end
@@ -648,5 +646,10 @@ end
 
 function filt( h::Vector, x::Vector, ratio::Rational = 1//1 )
     self = FIRFilter( h, ratio )
+    filt( self, x )
+end
+
+function filt( h::Vector, x::Vector, resampleRate::FloatingPoint, numFilters::Integer = 32 )
+    self = FIRFilter( h, resampleRate, numFilters )
     filt( self, x )
 end
