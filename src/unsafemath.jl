@@ -6,7 +6,7 @@ function unsafedot( a::Matrix, aColIdx::Integer, b::Vector, bLastIdx::Integer )
     aLen     = size(a)[1]
     bBaseIdx = bLastIdx - aLen
     dotprod  = zero(eltype(b))
-    for i in 1:aLen
+    @simd for i in 1:aLen
         @inbounds dotprod += a[ i, aColIdx ] * b[ bBaseIdx + i ]
     end
 
@@ -20,10 +20,10 @@ function unsafedot( a::Matrix, aColIdx::Integer, b::Vector, c::Vector, cLastIdx:
     cLastIdx < aLen || error( "cLastIdx but be < length(a)")
 
     dotprod = zero( eltype(c) )
-    for i in 1:aLen-cLastIdx
+    @simd for i in 1:aLen-cLastIdx
         @inbounds dotprod += a[ i, aColIdx ] * b[ i+cLastIdx-1 ]
     end
-    for i in 1:cLastIdx
+    @simd for i in 1:cLastIdx
         @inbounds dotprod += a[ aLen-cLastIdx+i, aColIdx ] * c[ i ]
     end
 
