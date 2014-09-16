@@ -15,18 +15,18 @@ if !isinteractive()
     end
 end
 
-function areApprox( x1::Vector, x2::Vector )
+function Base.isapprox( x1::Vector, x2::Vector )
     Nx1 = length( x1 )
     Nx2 = length( x2 )
 
     if Nx1 != Nx2
-        # @printf("x1 & x2 are different lengths vectors")
+        @printf("x1 & x2 are different lengths vectors")
         return false
     end
 
     for i = 1:Nx1
         if !isapprox( x1[i], x2[i] )
-            # @printf( "Something went wrong at index $i" )
+            @printf( "Something went wrong at index $i" )
             return false
         end
     end
@@ -103,7 +103,7 @@ function test_singlerate( h, x )
     piecewiseResult = [ y1, y2 ]
 
 
-     if areApprox( baseResult, statelesResult ) && areApprox( baseResult, statefulResult ) && areApprox( baseResult, piecewiseResult )
+     if isapprox( baseResult, statelesResult ) && isapprox( baseResult, statefulResult ) && isapprox( baseResult, piecewiseResult )
          return true
      end
 
@@ -171,7 +171,7 @@ function test_decimation( h, x, decimation )
     end
     piecewiseResult = [ y1, y2 ]
 
-    if areApprox( baseResult, statelesResult ) && areApprox( baseResult, statefulResult ) && areApprox( baseResult, piecewiseResult )
+    if isapprox( baseResult, statelesResult ) && isapprox( baseResult, statefulResult ) && isapprox( baseResult, piecewiseResult )
         return true
     end
 
@@ -244,7 +244,7 @@ function test_interpolation( h, x, interpolation )
     end
     piecewiseResult = [ y1, y2 ]
 
-    if areApprox( baseResult, statelesResult ) && areApprox( baseResult, statefulResult ) && areApprox( piecewiseResult, baseResult )
+    if isapprox( baseResult, statelesResult ) && isapprox( baseResult, statefulResult ) && isapprox( piecewiseResult, baseResult )
         return true
     end
 
@@ -330,7 +330,7 @@ function test_rational( h, x, ratio )
     end
     piecewiseResult = y1
 
-    if areApprox( baseResult, statelesResult ) && areApprox( baseResult, statefulResult ) && areApprox( baseResult, piecewiseResult )
+    if isapprox( baseResult, statelesResult ) && isapprox( baseResult, statefulResult ) && isapprox( baseResult, piecewiseResult )
         return true
     end
 
@@ -376,7 +376,7 @@ function test_arbitrary( x, resampleRate, numFilters )
     end
 
 
-    if areApprox( statelessResult, piecwiseResult ) && areApprox( naiveResult, statelessResult ) && areApprox( naiveResult, piecwiseResult )
+    if isapprox( statelessResult, piecwiseResult ) && isapprox( naiveResult, statelessResult ) && isapprox( naiveResult, piecwiseResult )
         return true
     end
 
@@ -439,7 +439,7 @@ function test_nextphase()
             for i in 2:interpolation
                 append!( result, [ Multirate.nextphase( result[end], ratio ) ] )
             end
-            @test areApprox( reference, result )
+            @test isapprox( reference, result )
         end
     end
 end
