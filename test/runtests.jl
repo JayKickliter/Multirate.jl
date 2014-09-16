@@ -362,9 +362,8 @@ function test_arbitrary( x, resampleRate, numFilters )
     @printf( "\n\tNaive arbitrary resampling\n\t\t" )
     @time naiveResult = NaiveResamplers.naivefilt( h, x, resampleRate, numFilters )
 
-    @printf( "\n\tNormal arbitrary resampling\n\t\t" )
-    self = Multirate.FIRFilter( h, resampleRate, numFilters )
-    @time statelessResult = filt( self, x )
+    @printf( "\n\tStateless arbitrary resampling\n\t\t" )
+    @time statelessResult = Multirate.filt( h, x, resampleRate, numFilters )
 
 
     @printf( "\n\tPiecewise arbitrary resampling\n\t\t" )
