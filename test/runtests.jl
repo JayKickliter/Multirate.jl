@@ -432,7 +432,7 @@ function test_nextphase()
     end
 end
 
-# test_nextphase()
-# test_all()
+test_nextphase()
+test_all()
 
-test_arbitrary( [100.0:-1:1], 0.27, 10 )
+# test_arbitrary( [100.0:-1:1], 0.27, 10 )
