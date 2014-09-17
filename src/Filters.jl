@@ -340,7 +340,7 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRStandard}, x::Vector{T}
         @inbounds buffer[yIdx] = unsafedot( h, x, yIdx )
     end
 
-    self.history = lshiftin!( history, x )
+    self.history = shiftin!( history, x )
 
     return buffer
 end
@@ -384,7 +384,7 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRInterpolator}, x::Vecto
         (𝜙, inputIdx) = 𝜙 == N𝜙 ? ( 1, inputIdx+1 ) : ( 𝜙+1, inputIdx )
     end
 
-    self.history = lshiftin!( history, x )
+    self.history = shiftin!( history, x )
 
     return buffer
 end
@@ -411,7 +411,7 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRRational}, x::Vector{T}
     bufLen             = length( buffer )
 
     if xLen < kernel.inputDeficit
-        self.history = lshiftin!( history, x )
+        self.history = shiftin!( history, x )
         kernel.inputDeficit -= xLen
         return T[]
     end
@@ -445,7 +445,7 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRRational}, x::Vector{T}
     end
 
     kernel.inputDeficit = inputIdx - xLen
-    self.history        = lshiftin!( history, x )
+    self.history        = shiftin!( history, x )
 
     return yIdx
 end
@@ -456,7 +456,7 @@ function filt{T}( self::FIRFilter{FIRRational}, x::Vector{T} )
 
     if xLen < kernel.inputDeficit
         history::Vector{T} = self.history
-        self.history = lshiftin!( history, x )
+        self.history = shiftin!( history, x )
         kernel.inputDeficit -= xLen
         return T[]
     end
@@ -482,7 +482,7 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRDecimator}, x::Vector{T
     xLen   = length( x )
 
     if xLen < kernel.inputDeficit
-        self.history = lshiftin!( history, x )
+        self.history = shiftin!( history, x )
         kernel.inputDeficit -= xLen
         return T[]
     end
@@ -508,7 +508,7 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRDecimator}, x::Vector{T
     end
 
     kernel.inputDeficit = inputIdx - xLen
-    self.history        = lshiftin!( history, x )
+    self.history        = shiftin!( history, x )
 
     return yIdx
 end
@@ -519,7 +519,7 @@ function filt{T}( self::FIRFilter{FIRDecimator}, x::Vector{T} )
 
     if xLen < kernel.inputDeficit
         history::Vector{T} = self.history
-        self.history       = lshiftin!( history, x )
+        self.history       = shiftin!( history, x )
         kernel.inputDeficit -= xLen
         return T[]
     end
@@ -571,7 +571,7 @@ function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
 
     # Do we have enough input samples to produce one or more output samples?
     if xLen < kernel.inputDeficit
-        self.history = lshiftin!( history, x )
+        self.history = shiftin!( history, x )
         kernel.inputDeficit -= xLen
         return buffer[1:bufIdx-1]
     end
@@ -624,7 +624,7 @@ function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
     bufLen == bufIdx - 1 || resize!( buffer, bufIdx - 1)
     kernel.inputDeficit = inputIdx - xLen
 
-    self.history = lshiftin!( history, x )
+    self.history = shiftin!( history, x )
 
     return buffer
 end
