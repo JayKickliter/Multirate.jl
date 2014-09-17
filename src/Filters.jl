@@ -84,7 +84,7 @@ type FIRArbitrary  <: FIRKernel
     pfb::PFB
     N𝜙::Int
     tapsPer𝜙::Int
-    resampleRate::Float64
+    rate::Float64
     yCount::Int
     xCount::Int
     yLower::Number
@@ -96,12 +96,12 @@ type FIRArbitrary  <: FIRKernel
     inputDeficit::Int
     Δ::Float64
     ΔPrevious::Float64
-    function FIRArbitrary( h::Vector, resampleRate::Real, numFilters::Integer )
+    function FIRArbitrary( h::Vector, rate::Real, N𝜙::Integer )
         self                 = new()
-        self.pfb             = flipud( polyize( h, numFilters ) )
+        self.pfb             = flipud( polyize( h, N𝜙 ) )
         self.tapsPer𝜙        = size( self.pfb )[1]
         self.N𝜙              = size( self.pfb )[2]
-        self.resampleRate    = resampleRate
+        self.rate            = rate
         self.yCount          = 0
         self.xCount          = 0
         self.yLower          = 0
@@ -131,16 +131,16 @@ function FIRFilter( h::Vector, resampleRatio::Rational = 1//1 )
     historyLen    = 0
 
     if resampleRatio == 1                                     # single-rate
-        kernel        = FIRStandard( h )
+        kernel     = FIRStandard( h )
         historyLen = kernel.hLen - 1
     elseif interpolation == 1                                 # decimate
-        kernel        = FIRDecimator( h, decimation )
+        kernel     = FIRDecimator( h, decimation )
         historyLen = kernel.hLen - 1
     elseif decimation == 1                                    # interpolate
         kernel        = FIRInterpolator( h, interpolation )
         historyLen = kernel.tapsPer𝜙 - 1
     else                                                      # rational
-        kernel        = FIRRational( h, resampleRatio )
+        kernel     = FIRRational( h, resampleRatio )
         historyLen = kernel.tapsPer𝜙 - 1
     end
 
@@ -149,15 +149,12 @@ function FIRFilter( h::Vector, resampleRatio::Rational = 1//1 )
     FIRFilter( kernel, history, historyLen )
 end
 
-function FIRFilter( h::Vector, resampleRate::FloatingPoint, numFilters::Integer = 32 )
-    resampleRate > 0.0 || error( "resampleRate must be greater than 0" )
-
-    kernel     = FIRArbitrary( h, resampleRate, numFilters )
+function FIRFilter( h::Vector, rate::FloatingPoint, N𝜙::Integer = 32 )
+    rate > 0.0 || error( "rate must be greater than 0" )
+    kernel     = FIRArbitrary( h, rate, N𝜙 )
     historyLen = kernel.tapsPer𝜙 - 1
     history    = zeros( historyLen )
-
     updatestate!( kernel )
-
     FIRFilter( kernel, history, historyLen )
 end
 
@@ -203,12 +200,12 @@ end
 #    5  6  7  8
 #    9  0  0  0
 
-function polyize{T}( h::Vector{T}, numFilters::Integer )
+function polyize{T}( h::Vector{T}, N𝜙::Integer )
     hLen      = length( h )
-    hLenPer𝜙  = iceil(  hLen/numFilters  )
-    pfbSize   = hLenPer𝜙 * numFilters
+    hLenPer𝜙  = iceil(  hLen/N𝜙  )
+    pfbSize   = hLenPer𝜙 * N𝜙
 
-    if hLen != pfbSize                                # check that the vector is an integer multiple of numFilters
+    if hLen != pfbSize                                # check that the vector is an integer multiple of N𝜙
         hExtended             = similar( h, pfbSize ) # No? extend and zero pad
         hExtended[1:hLen]     = h
         hExtended[hLen+1:end] = 0
@@ -216,8 +213,8 @@ function polyize{T}( h::Vector{T}, numFilters::Integer )
     end
 
     hLen      = length( h )
-    hLenPer𝜙  = int( hLen/numFilters )
-    pfb       = reshape( h, numFilters, hLenPer𝜙 )'
+    hLenPer𝜙  = int( hLen/N𝜙 )
+    pfb       = reshape( h, N𝜙, hLenPer𝜙 )'
 end
 
 
@@ -272,7 +269,7 @@ end
 function inputlength( outputlength::Int, ratio::Rational, initial𝜙::Integer )
     interpolation = num( ratio )
     decimation    = den( ratio )
-    inLen = ( outputlength * decimation + initial𝜙 - 1 ) / interpolation
+    inLen         = ( outputlength * decimation + initial𝜙 - 1 ) / interpolation
     iceil( inLen )
 end
 
@@ -373,17 +370,15 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRInterpolator}, x::Vecto
     historyLen         = self.historyLen
     outLen             = outputlength( self, xLen )
     criticalYidx       = min( historyLen*interpolation, outLen )
+    inputIdx           = 1
+    𝜙                  = 1
 
     bufLen >= outLen || error( "length( buffer ) must be >= interpolation * length(x)")
-
-    inputIdx = 1
-    𝜙        = 1
 
     for yIdx in 1:criticalYidx
         @inbounds buffer[yIdx] = unsafedot( pfb, 𝜙, history, x, inputIdx )
         (𝜙, inputIdx) = 𝜙 == N𝜙 ? ( 1, inputIdx+1 ) : ( 𝜙+1, inputIdx )
     end
-
     for yIdx in criticalYidx+1:outLen
         @inbounds buffer[yIdx] = unsafedot( pfb, 𝜙, x, inputIdx )
         (𝜙, inputIdx) = 𝜙 == N𝜙 ? ( 1, inputIdx+1 ) : ( 𝜙+1, inputIdx )
@@ -547,20 +542,20 @@ end
 
 function updatestate!( self::FIRArbitrary )
     self.yCount         += 1
-    self.𝜙IdxLower       = ifloor( mod( (self.yCount-1)/self.resampleRate, 1 ) * self.N𝜙 ) + 1
+    self.𝜙IdxLower       = ifloor( mod( (self.yCount-1)/self.rate, 1 ) * self.N𝜙 ) + 1
     self.𝜙IdxUpper       = self.𝜙IdxLower == self.N𝜙 ? 1 : self.𝜙IdxLower + 1
     self.xIdxUpperOffset = self.𝜙IdxLower == self.N𝜙 ? 1 : 0
     xCountCurrent        = self.xCount
-    self.xCount          = ifloor( (self.yCount-1)/self.resampleRate )
+    self.xCount          = ifloor( (self.yCount-1)/self.rate )
     self.xIdxDelta       = self.xCount - xCountCurrent
     self.ΔPrevious       = self.Δ
-    self.Δ               = mod( (self.yCount-1) * self.N𝜙 / self.resampleRate, 1 )
+    self.Δ               = mod( (self.yCount-1) * self.N𝜙 / self.rate, 1 )
 end
 
 function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
     kernel             = self.kernel
     xLen               = length( x )
-    bufLen             = iceil( xLen * kernel.resampleRate ) + 1
+    bufLen             = iceil( xLen * kernel.rate ) + 1
     buffer             = similar( x, bufLen )
     bufIdx             = 1
     history::Vector{T} = self.history
@@ -648,7 +643,7 @@ function filt( h::Vector, x::Vector, ratio::Rational = 1//1 )
     filt( self, x )
 end
 
-function filt( h::Vector, x::Vector, resampleRate::FloatingPoint, numFilters::Integer = 32 )
-    self = FIRFilter( h, resampleRate, numFilters )
+function filt( h::Vector, x::Vector, rate::FloatingPoint, N𝜙::Integer = 32 )
+    self = FIRFilter( h, rate, N𝜙 )
     filt( self, x )
 end
