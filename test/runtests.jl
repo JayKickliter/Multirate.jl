@@ -26,7 +26,7 @@ function Base.isapprox( x1::Vector, x2::Vector )
 
     for i = 1:Nx1
         if !isapprox( x1[i], x2[i] )
-            @printf( "Something went wrong at index $i" )
+            @printf( "Something went wrong at index %d", i )
             return false
         end
     end
