@@ -347,11 +347,6 @@ function test_arbitrary( x, resampleRate, numFilters )
 
     @printf( "\n\tStateless arbitrary resampling\n\t\t" )
     @time statelessResult = Multirate.filt( h, x, resampleRate, numFilters )
-
-    # commonLen = min( length(naiveResult), length(statelessResult) )
-    # isapprox( naiveResult[1:commonLen],statelessResult[1:commonLen] )
-
-    # display( [[1:commonLen] naiveResult[1:commonLen] statelessResult[1:commonLen] naiveResult[1:commonLen].-statelessResult[1:commonLen]])
     
     @printf( "\n\tPiecewise arbitrary resampling\n\t\t" )
     self           = Multirate.FIRFilter( h, resampleRate, numFilters )
@@ -432,7 +427,9 @@ function test_nextphase()
     end
 end
 
-test_nextphase()
-test_all()
+# test_nextphase()
+# test_all()
 
-# test_arbitrary( [100.0:-1:1], 0.27, 10 )
+x = [201.0:-1:1]
+
+@test test_arbitrary( x, 0.27, 10 )

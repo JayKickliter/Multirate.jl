@@ -573,12 +573,12 @@ function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
     xIdxLower = kernel.inputDeficit
     xIdxUpper = kernel.𝜙IdxLower == kernel.N𝜙 ? xIdxLower + 1 : xIdxLower
 
-    # println()
+    println()
     while xIdxLower <= xLen
         yLower = zero(T)
         yUpper = zero(T)
         
-        # println( "yCount = $(kernel.yCount), xLower = $(x[xIdxLower]), 𝜙IdxLower = $(kernel.𝜙IdxLower), 𝜙IdxUpper = $(kernel.𝜙IdxUpper), Δ = $(kernel.Δ)")
+        println( "yCount = $(kernel.yCount), xIdxLower = $xIdxLower, xIdxUpper = $xIdxUpper, 𝜙IdxLower = $(kernel.𝜙IdxLower), 𝜙IdxUpper = $(kernel.𝜙IdxUpper), Δ = $(kernel.Δ)")
 
         # Compute yLower
         #   As long as inputIdx <= xLen, we can calculate yLower
