@@ -167,6 +167,12 @@ reset( self::FIRKernel ) = self
 # For rational kernel, set 𝜙Idx back to 1
 reset( self::FIRRational ) = self.𝜙Idx = 1
 
+# For rational kernel, set 𝜙Idx back to 1
+function reset( self::FIRArbitrary )
+    self.yCount = 0
+    update!( self )
+end
+
 # For FIRFilter, set delay line to zeros of same tyoe and required length
 function reset( self::FIRFilter )
     self.history = zeros( eltype( self.history ), self.historyLen )
@@ -248,6 +254,8 @@ function outputlength( self::FIRFilter{FIRRational}, inputlength::Integer )
     kernel = self.kernel
     outputlength( inputlength-kernel.inputDeficit+1, kernel.ratio, kernel.𝜙Idx )
 end
+
+# TODO: outputlength function for arbitrary FIR kernel
 
 
 
@@ -569,16 +577,13 @@ function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
     # InputDeficit is set to 1 when instantiation the FIRArbitrary kernel, that way the first
     #   input always produces an output.
     # inputIdx = kernel.inputDeficit
-    
+
     xIdxLower = kernel.inputDeficit
     xIdxUpper = kernel.𝜙IdxLower == kernel.N𝜙 ? xIdxLower + 1 : xIdxLower
 
-    println()
     while xIdxLower <= xLen
         yLower = zero(T)
         yUpper = zero(T)
-        
-        println( "yCount = $(kernel.yCount), xIdxLower = $xIdxLower, xIdxUpper = $xIdxUpper, 𝜙IdxLower = $(kernel.𝜙IdxLower), 𝜙IdxUpper = $(kernel.𝜙IdxUpper), Δ = $(kernel.Δ)")
 
         # Compute yLower
         #   As long as inputIdx <= xLen, we can calculate yLower
@@ -596,18 +601,18 @@ function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
             else
                 yUpper = unsafedot( pfb, kernel.𝜙IdxUpper, x, xIdxUpper )
             end
-            
-            buffer[bufIdx] = kernel.yLower * (1 - kernel.Δ) + yUpper * kernel.Δ            
+
+            buffer[bufIdx] = kernel.yLower * (1 - kernel.Δ) + yUpper * kernel.Δ
             bufIdx        += 1
             update!( kernel )
-            xIdxLower += ifloor( (kernel.yCount-1)/kernel.rate ) - ifloor( (kernel.yCount-2)/kernel.rate )            
+            xIdxLower += ifloor( (kernel.yCount-1)/kernel.rate ) - ifloor( (kernel.yCount-2)/kernel.rate )
         else
             # To finish computing this output sample, we need to compute yUpper.
             # However, we've reached the end of the line.
             # Set the 'stalled' state in the kernel and finish this output next time.
             kernel.yUpperStalled = true
             xIdxLower += ifloor( (kernel.yCount)/kernel.rate ) - ifloor( (kernel.yCount-1)/kernel.rate )
-        end 
+        end
         xIdxUpper  = kernel.𝜙IdxLower == kernel.N𝜙 ? xIdxLower + 1 : xIdxLower
     end
 
