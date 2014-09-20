@@ -427,9 +427,5 @@ function test_nextphase()
     end
 end
 
-# test_nextphase()
-# test_all()
-
-x = [201.0:-1:1]
-
-@test test_arbitrary( x, 0.27, 10 )
+test_nextphase()
+test_all()
