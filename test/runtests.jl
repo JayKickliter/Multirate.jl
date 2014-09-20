@@ -20,13 +20,13 @@ function Base.isapprox( x1::Vector, x2::Vector )
     Nx2 = length( x2 )
 
     if Nx1 != Nx2
-        @printf("x1 & x2 are different lengths vectors")
+        @printf("x1 & x2 are different lengths vectors\n")
         return false
     end
 
     for i = 1:Nx1
         if !isapprox( x1[i], x2[i] )
-            @printf( "Something went wrong at index %d", i )
+            @printf( "Something went wrong at index %d\n", i )
             return false
         end
     end
@@ -347,8 +347,7 @@ function test_arbitrary( x, resampleRate, numFilters )
 
     @printf( "\n\tStateless arbitrary resampling\n\t\t" )
     @time statelessResult = Multirate.filt( h, x, resampleRate, numFilters )
-
-
+    
     @printf( "\n\tPiecewise arbitrary resampling\n\t\t" )
     self           = Multirate.FIRFilter( h, resampleRate, numFilters )
     piecwiseResult = eltype(x)[]
@@ -358,8 +357,9 @@ function test_arbitrary( x, resampleRate, numFilters )
         append!( piecwiseResult, thisY )
     end
 
-
-    if isapprox( statelessResult, piecwiseResult ) && isapprox( naiveResult, statelessResult ) && isapprox( naiveResult, piecwiseResult )
+    commonLen = min( length(naiveResult), length(statelessResult), length(piecwiseResult) )
+    
+    if isapprox( statelessResult[1:commonLen], piecwiseResult[1:commonLen] ) && isapprox( naiveResult[1:commonLen], statelessResult[1:commonLen] ) && isapprox( naiveResult[1:commonLen], piecwiseResult[1:commonLen] )
         return true
     end
 
