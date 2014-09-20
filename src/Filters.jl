@@ -321,7 +321,7 @@ end
 #==============================================================================#
 
 function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRStandard}, x::Vector{T} )
-    history::Vector{T} = self.history
+    history::Vector{T} = self.history # TODO: figure out a better way of handling this
     h::Vector{T}       = self.kernel.h
     hLen               = self.kernel.hLen
     historyLen         = self.historyLen
@@ -332,7 +332,7 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRStandard}, x::Vector{T}
 
     bufLen >= xLen || error( "buffer length must be >= x length" )
 
-    for yIdx in 1:criticalYidx                                   # this first loop takes care of filter ramp up and previous history
+    for yIdx in 1:criticalYidx        # this first loop takes care of filter ramp up and previous history
         @inbounds buffer[yIdx] = unsafedot( h, history, x, yIdx )
     end
 
@@ -429,7 +429,6 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRRational}, x::Vector{T}
     yIdx               = 0
 
     while inputIdx <= xLen
-
         yIdx += 1
         if inputIdx < kernel.tapsPer𝜙
             hIdx = 1
@@ -439,9 +438,8 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRRational}, x::Vector{T}
         end
 
         buffer[ yIdx ] = accumulator
-
-        inputIdx   += ifloor( ( kernel.𝜙Idx + decimation - 1 ) / interpolation )
-        kernel.𝜙Idx = nextphase( kernel.𝜙Idx, kernel.ratio )
+        inputIdx      += ifloor( ( kernel.𝜙Idx + decimation - 1 ) / interpolation )
+        kernel.𝜙Idx    = nextphase( kernel.𝜙Idx, kernel.ratio )
     end
 
     kernel.inputDeficit = inputIdx - xLen
@@ -546,7 +544,7 @@ function update!( self::FIRArbitrary )
     self.𝜙IdxUpper = self.𝜙IdxLower == self.N𝜙 ? 1 : self.𝜙IdxLower + 1
     self.Δ         = mod( (self.yCount-1) * self.N𝜙 / self.rate, 1 )
 end
-
+# TODO: create an out of place version similar to other filt methods
 function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
     kernel             = self.kernel
     xLen               = length( x )
