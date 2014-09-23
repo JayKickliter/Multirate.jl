@@ -82,29 +82,26 @@ end
 # Arbitrary resampler FIR kernel
 type FIRArbitrary  <: FIRKernel
     pfb::PFB
+    pfbΔ::PFB
     N𝜙::Int
     tapsPer𝜙::Int
     rate::Float64
     yCount::Int
-    yLower::Number
-    yUpperStalled::Bool
-    𝜙IdxLower::Int
-    𝜙IdxUpper::Int
+    𝜙Idx::Int
     inputDeficit::Int
     Δ::Float64
     function FIRArbitrary( h::Vector, rate::Real, N𝜙::Integer )
-        self                 = new()
-        self.pfb             = flipud( polyize( h, N𝜙 ) )
-        self.N𝜙              = size( self.pfb )[2]
-        self.tapsPer𝜙        = size( self.pfb )[1]
-        self.rate            = rate
-        self.yCount          = 0
-        self.yLower          = 0
-        self.yUpperStalled   = false
-        self.𝜙IdxLower       = 0
-        self.𝜙IdxUpper       = 0
-        self.inputDeficit    = 1
-        self.Δ               = 0.0
+        self              = new()
+        hΔ                = diff( h )
+        self.pfb          = flipud( polyize( h,  N𝜙 ) )
+        self.pfbΔ         = flipud( polyize( hΔ, N𝜙 ) )
+        self.N𝜙           = N𝜙
+        self.tapsPer𝜙     = size( self.pfb )[1]
+        self.rate         = rate
+        self.yCount       = 0
+        self.𝜙Idx         = 0
+        self.inputDeficit = 1
+        self.Δ            = 0.0
         return self
     end
 end
@@ -540,8 +537,7 @@ end
 
 function update!( self::FIRArbitrary )
     self.yCount   += 1
-    self.𝜙IdxLower = ifloor( mod( (self.yCount-1)/self.rate, 1 ) * self.N𝜙 ) + 1
-    self.𝜙IdxUpper = self.𝜙IdxLower == self.N𝜙 ? 1 : self.𝜙IdxLower + 1
+    self.𝜙Idx      = ifloor( mod( (self.yCount-1)/self.rate, 1 ) * self.N𝜙 ) + 1
     self.Δ         = mod( (self.yCount-1) * self.N𝜙 / self.rate, 1 )
 end
 # TODO: create an out of place version similar to other filt methods
@@ -553,15 +549,7 @@ function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
     bufIdx             = 1
     history::Vector{T} = self.history
     pfb::PFB{T}        = kernel.pfb
-
-    # In the previous run, did 𝜙IdxUpper wrap around, requiring an extra input that we didn't have yet?
-    if kernel.yUpperStalled && xLen >= 1
-        yUpper               = dot( pfb[:,1], [ self.history, x[1] ]  )
-        buffer[bufIdx]       = kernel.yLower * (1 - kernel.Δ) + yUpper * kernel.Δ
-        kernel.yUpperStalled = false
-        bufIdx              += 1
-        update!(kernel)
-    end
+    pfbΔ::PFB{T}       = kernel.pfbΔ
 
     # Do we have enough input samples to produce one or more output samples?
     if xLen < kernel.inputDeficit
@@ -576,48 +564,38 @@ function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
     #   input always produces an output.
     # inputIdx = kernel.inputDeficit
 
-    xIdxLower = kernel.inputDeficit
-    xIdxUpper = kernel.𝜙IdxLower == kernel.N𝜙 ? xIdxLower + 1 : xIdxLower
+    xIdx = kernel.inputDeficit
 
-    while xIdxLower <= xLen
+    while xIdx <= xLen
         yLower = zero(T)
         yUpper = zero(T)
 
+
         # Compute yLower
         #   As long as inputIdx <= xLen, we can calculate yLower
-        if xIdxLower < kernel.tapsPer𝜙
-            kernel.yLower = unsafedot( pfb, kernel.𝜙IdxLower, history, x, xIdxLower )
+        if xIdx < kernel.tapsPer𝜙
+            yLower = unsafedot( pfb, kernel.𝜙Idx, history, x, xIdx )
+            yUpper = unsafedot( pfbΔ, kernel.𝜙Idx, history, x, xIdx )
         else
-            kernel.yLower = unsafedot( pfb, kernel.𝜙IdxLower, x, xIdxLower )
+            yLower = unsafedot( pfb, kernel.𝜙Idx, x, xIdx )
+            yUpper = unsafedot( pfbΔ, kernel.𝜙Idx, x, xIdx )
         end
 
-        # If xIdx was advanced in the previous line due to a 𝜙IdxUpper wrap-around,
-        #   we need to make sure we there are still enough input samples to complete this output.
-        if xIdxUpper <= xLen
-            if xIdxUpper < kernel.tapsPer𝜙
-                yUpper = unsafedot( pfb, kernel.𝜙IdxUpper, history, x, xIdxUpper )
-            else
-                yUpper = unsafedot( pfb, kernel.𝜙IdxUpper, x, xIdxUpper )
-            end
+        println( "N = $bufIdx, yLower = $yLower, yUpper = $(yLower + yUpper), 𝜙 = $(kernel.𝜙Idx), Δ = $(kernel.Δ)")        
 
-            buffer[bufIdx] = kernel.yLower * (1 - kernel.Δ) + yUpper * kernel.Δ
-            bufIdx        += 1
-            update!( kernel )
-            xIdxLower += ifloor( (kernel.yCount-1)/kernel.rate ) - ifloor( (kernel.yCount-2)/kernel.rate )
-        else
-            # To finish computing this output sample, we need to compute yUpper.
-            # However, we've reached the end of the line.
-            # Set the 'stalled' state in the kernel and finish this output next time.
-            kernel.yUpperStalled = true
-            xIdxLower += ifloor( (kernel.yCount)/kernel.rate ) - ifloor( (kernel.yCount-1)/kernel.rate )
-        end
-        xIdxUpper  = kernel.𝜙IdxLower == kernel.N𝜙 ? xIdxLower + 1 : xIdxLower
+        buffer[bufIdx] = yLower + yUpper * kernel.Δ
+        
+        bufIdx += 1
+        update!( kernel )
+        
+        xIdx += ifloor( (kernel.yCount-1)/kernel.rate ) - ifloor( (kernel.yCount-2)/kernel.rate )
+
     end
 
     # Did we overestimate needed buffer size?
     # TODO: Get rid of this by correctly calculating output size.
     bufLen == bufIdx - 1 || resize!( buffer, bufIdx - 1)
-    kernel.inputDeficit = xIdxLower - xLen
+    kernel.inputDeficit = xIdx - xLen
 
     self.history = shiftin!( history, x )
 

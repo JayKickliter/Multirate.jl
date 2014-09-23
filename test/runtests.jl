@@ -341,6 +341,7 @@ function test_arbitrary( x, resampleRate, numFilters )
     @printf( "____ ____ ___      ____ ____ ____ ____ _  _ ___  _    _ _  _ ____\n" )
     @printf( "|__| |__/ |__]     |__/ |___ [__  |__| |\\/| |__] |    | |\\ | | __\n" )
     @printf( "|  | |  \\ |__] .   |  \\ |___ ___] |  | |  | |    |___ | | \\| |__]\n" )
+    @printf( "\n\nrate = %f, N𝜙 = %d, x::%s. xLen = %d, ", resampleRate, numFilters, string(typeof(x)), length(x) )
 
     @printf( "\n\tNaive arbitrary resampling\n\t\t" )
     @time naiveResult = NaiveResamplers.naivefilt( h, x, resampleRate, numFilters )
@@ -356,16 +357,21 @@ function test_arbitrary( x, resampleRate, numFilters )
         thisY = filt( self, x[i:i] )
         append!( piecwiseResult, thisY )
     end
-
+    
     commonLen = min( length(naiveResult), length(statelessResult), length(piecwiseResult) )
     
-    if isapprox( statelessResult[1:commonLen], piecwiseResult[1:commonLen] ) && isapprox( naiveResult[1:commonLen], statelessResult[1:commonLen] ) && isapprox( naiveResult[1:commonLen], piecwiseResult[1:commonLen] )
+    resize!( naiveResult, commonLen )
+    resize!( statelessResult, commonLen )
+    resize!( piecwiseResult, commonLen )
+
+    if isapprox( naiveResult, statelessResult ) && isapprox( naiveResult, piecwiseResult )
         return true
     end
 
-    commonLen = min( length(naiveResult), length(statelessResult), length(piecwiseResult) )
-    display( [ [1:commonLen] naiveResult[1:commonLen] statelessResult[1:commonLen]  piecwiseResult[1:commonLen] naiveResult[1:commonLen].-statelessResult[1:commonLen] naiveResult[1:commonLen].-piecwiseResult[1:commonLen] ] )
-
+    display( [  [1:commonLen] naiveResult statelessResult  piecwiseResult abs(naiveResult.-statelessResult) abs(naiveResult.-piecwiseResult) ] )
+    
+    
+    display( [ [1:commonLen-1] diff(naiveResult) diff(statelessResult) diff(piecwiseResult) ] )
     return false
 end
 
@@ -427,5 +433,12 @@ function test_nextphase()
     end
 end
 
-test_nextphase()
-test_all()
+# test_nextphase()
+# test_all()
+
+# h = rand(10)
+# d = Multirate.dfilter( h )
+# [ h d ]
+# x = [1.0:300]
+x = rand(Float32, 300)
+test_arbitrary( x, 0.27, 10 )
