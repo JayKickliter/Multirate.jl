@@ -87,18 +87,20 @@ type FIRArbitrary  <: FIRKernel
     tapsPer𝜙::Int
     rate::Float64
     yCount::Int
+    xIdx::Int
     𝜙Idx::Int
     inputDeficit::Int
     Δ::Float64
     function FIRArbitrary( h::Vector, rate::Real, N𝜙::Integer )
         self              = new()
-        hΔ                = diff( h )
-        self.pfb          = flipud( polyize( h,  N𝜙 ) )
-        self.pfbΔ         = flipud( polyize( hΔ, N𝜙 ) )
+        hΔ                = [diff( h ), 0]
+        self.pfb          = flipud(polyize( h,  N𝜙 ))
+        self.pfbΔ         = flipud(polyize( hΔ, N𝜙 ))
         self.N𝜙           = N𝜙
         self.tapsPer𝜙     = size( self.pfb )[1]
         self.rate         = rate
         self.yCount       = 0
+        self.xIdx         = 0        
         self.𝜙Idx         = 0
         self.inputDeficit = 1
         self.Δ            = 0.0
@@ -537,6 +539,7 @@ end
 
 function update!( self::FIRArbitrary )
     self.yCount   += 1
+    self.xIdx     += ifloor( (self.yCount-1)/self.rate ) - ifloor( (self.yCount-2)/self.rate )
     self.𝜙Idx      = ifloor( mod( (self.yCount-1)/self.rate, 1 ) * self.N𝜙 ) + 1
     self.Δ         = mod( (self.yCount-1) * self.N𝜙 / self.rate, 1 )
 end
@@ -564,38 +567,35 @@ function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
     #   input always produces an output.
     # inputIdx = kernel.inputDeficit
 
-    xIdx = kernel.inputDeficit
-
-    while xIdx <= xLen
+    kernel.xIdx = kernel.inputDeficit
+    println()
+    while kernel.xIdx <= xLen
         yLower = zero(T)
         yUpper = zero(T)
 
 
         # Compute yLower
         #   As long as inputIdx <= xLen, we can calculate yLower
-        if xIdx < kernel.tapsPer𝜙
-            yLower = unsafedot( pfb, kernel.𝜙Idx, history, x, xIdx )
-            yUpper = unsafedot( pfbΔ, kernel.𝜙Idx, history, x, xIdx )
+        if kernel.xIdx < kernel.tapsPer𝜙
+            yLower = unsafedot( pfb, kernel.𝜙Idx, history, x, kernel.xIdx )
+            yUpper = unsafedot( pfbΔ, kernel.𝜙Idx, history, x, kernel.xIdx )
         else
-            yLower = unsafedot( pfb, kernel.𝜙Idx, x, xIdx )
-            yUpper = unsafedot( pfbΔ, kernel.𝜙Idx, x, xIdx )
+            yLower = unsafedot( pfb, kernel.𝜙Idx, x, kernel.xIdx )
+            yUpper = unsafedot( pfbΔ, kernel.𝜙Idx, x, kernel.xIdx )
         end
 
-        println( "N = $bufIdx, yLower = $yLower, yUpper = $(yLower + yUpper), 𝜙 = $(kernel.𝜙Idx), Δ = $(kernel.Δ)")        
+        println( "yCount = $(kernel.yCount), yLower = $yLower, yUpper = $(yLower + yUpper), 𝜙 = $(kernel.𝜙Idx), Δ = $(kernel.Δ)")        
 
         buffer[bufIdx] = yLower + yUpper * kernel.Δ
         
         bufIdx += 1
         update!( kernel )
-        
-        xIdx += ifloor( (kernel.yCount-1)/kernel.rate ) - ifloor( (kernel.yCount-2)/kernel.rate )
-
     end
 
     # Did we overestimate needed buffer size?
     # TODO: Get rid of this by correctly calculating output size.
     bufLen == bufIdx - 1 || resize!( buffer, bufIdx - 1)
-    kernel.inputDeficit = xIdx - xLen
+    kernel.inputDeficit = kernel.xIdx - xLen
 
     self.history = shiftin!( history, x )
 
