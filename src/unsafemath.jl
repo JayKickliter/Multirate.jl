@@ -5,22 +5,22 @@
 function unsafedot( a::Matrix, aColIdx::Integer, b::Vector, bLastIdx::Integer )
     aLen     = size(a)[1]
     bBaseIdx = bLastIdx - aLen
-    dotprod  = zero(eltype(b))
-    @simd for i in 1:aLen
+    dotprod  = a[ 1, aColIdx ] * b[ bBaseIdx + 1 ]
+    @simd for i in 2:aLen
         @inbounds dotprod += a[ i, aColIdx ] * b[ bBaseIdx + i ]
     end
 
     return dotprod
 end
 
-function unsafedot( a::Matrix, aColIdx::Integer, b::Vector, c::Vector, cLastIdx::Integer )
+function unsafedot{T}( a::Matrix, aColIdx::Integer, b::Vector{T}, c::Vector{T}, cLastIdx::Integer )
     aLen = size(a)[1]
     bLen = length(b)
     bLen == aLen-1  || error( "length(b) must equal to length(a)[1] - 1" )
     cLastIdx < aLen || error( "cLastIdx but be < length(a)")
 
-    dotprod = zero( eltype(c) )
-    @simd for i in 1:aLen-cLastIdx
+    dotprod = a[ 1, aColIdx] * b[ cLastIdx ]
+    @simd for i in 2:aLen-cLastIdx
         @inbounds dotprod += a[ i, aColIdx ] * b[ i+cLastIdx-1 ]
     end
     @simd for i in 1:cLastIdx
@@ -33,17 +33,17 @@ end
 function unsafedot( a::Vector, b::Vector, bLastIdx::Integer )
     aLen     = length(a)
     bBaseIdx = bLastIdx - aLen
-    dotprod  = zero(eltype(b))
-    @simd for i in 1:aLen
+    dotprod  = a[ 1 ] * b[ bBaseIdx + 1 ]
+    @simd for i in 2:aLen
         @inbounds dotprod += a[ i ] * b[ bBaseIdx + i ]
     end
 
     return dotprod
 end
 
-function unsafedot( a::Vector, b::Vector, c::Vector, cLastIdx::Integer )
+function unsafedot{T}( a::Vector, b::Vector{T}, c::Vector{T}, cLastIdx::Integer )
     aLen    = length(a)
-    dotprod = zero( eltype(b) )
+    dotprod = zero(a[1]*b[1])
     @simd for i in 1:aLen-cLastIdx
         @inbounds dotprod += a[ i ] * b[ i+cLastIdx-1 ]
     end
