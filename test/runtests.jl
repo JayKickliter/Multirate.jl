@@ -348,7 +348,7 @@ function test_arbitrary( x, resampleRate, numFilters )
 
     @printf( "\n\tStateless arbitrary resampling\n\t\t" )
     @time statelessResult = Multirate.filt( h, x, resampleRate, numFilters )
-    
+
     @printf( "\n\tPiecewise arbitrary resampling\n\t\t" )
     self           = Multirate.FIRFilter( h, resampleRate, numFilters )
     piecwiseResult = eltype(x)[]
@@ -357,9 +357,9 @@ function test_arbitrary( x, resampleRate, numFilters )
         thisY = filt( self, x[i:i] )
         append!( piecwiseResult, thisY )
     end
-    
+
     commonLen = min( length(naiveResult), length(statelessResult), length(piecwiseResult) )
-    
+
     resize!( naiveResult, commonLen )
     resize!( statelessResult, commonLen )
     resize!( piecwiseResult, commonLen )
@@ -369,8 +369,8 @@ function test_arbitrary( x, resampleRate, numFilters )
     end
 
     display( [  [1:commonLen] naiveResult statelessResult  piecwiseResult abs(naiveResult.-statelessResult) abs(naiveResult.-piecwiseResult) ] )
-    
-    
+
+
     display( [ [1:commonLen-1] diff(naiveResult) diff(statelessResult) diff(piecwiseResult) ] )
     return false
 end
@@ -433,12 +433,5 @@ function test_nextphase()
     end
 end
 
-# test_nextphase()
-# test_all()
-
-# h = rand(10)
-# d = Multirate.dfilter( h )
-# [ h d ]
-# x = [1.0:300]
-x = rand(Float32, 300)
-test_arbitrary( x, 0.27, 10 )
+test_nextphase()
+test_all()

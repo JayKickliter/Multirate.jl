@@ -40,7 +40,6 @@ function naivefilt( h::Vector, x::Vector, resamplerate::FloatingPoint, numfilter
         yLower       = xInterpolated[xxIdxLower]
         yUpper       = xInterpolated[xxIdxUpper]
         y[yIdx]      = yLower + Δ*( yUpper - yLower )
-        println( "n = $yIdx, yLower = $yLower, yUpper = $yUpper, Δ = $Δ")
         yIdx         = yIdx + 1
         xxIdxVirtual = numfilters * ( yIdx - 1 ) / resamplerate + 1
         xxIdxLower   = ifloor( xxIdxVirtual )
