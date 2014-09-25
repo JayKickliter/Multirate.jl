@@ -80,29 +80,28 @@ end
 
 
 # Arbitrary resampler FIR kernel
-type FIRArbitrary  <: FIRKernel
+type FIRArbitrary{T} <: FIRKernel
     rate::Float64
-    pfb::PFB
-    dpfb::PFB
+    pfb::PFB{T}
+    dpfb::PFB{T}
     N𝜙::Int
     tapsPer𝜙::Int
     𝜙Idx::Int
     𝜙Virtual::Float64
     inputDeficit::Int
-    function FIRArbitrary( h::Vector, rate::Real, N𝜙::Integer )
-        self              = new()
-        hΔ                = [diff( h ), 0]
-        self.rate         = rate
-        self.pfb          = flipud(polyize( h,  N𝜙 ))
-        self.dpfb         = flipud(polyize( hΔ, N𝜙 ))
-        self.N𝜙           = N𝜙
-        self.tapsPer𝜙     = size( self.pfb )[1]
-        self.𝜙Idx         = 0
-        self.𝜙Virtual     = 0
-        self.inputDeficit = 1
-        return self
-    end
 end
+
+function FIRArbitrary( h::Vector, rate::Real, N𝜙::Integer )
+    hΔ           = [diff( h ), 0]
+    pfb          = flipud(polyize( h,  N𝜙 ))
+    dpfb         = flipud(polyize( hΔ, N𝜙 ))
+    tapsPer𝜙     = size( pfb )[1]
+    𝜙Idx         = 0
+    𝜙Virtual     = 0.0
+    inputDeficit = 1
+    FIRArbitrary( rate, pfb, dpfb, N𝜙, tapsPer𝜙, 𝜙Idx, 𝜙Virtual, inputDeficit )
+end
+
 
 
 # FIRFilter - the kernel does the heavy lifting
@@ -532,15 +531,15 @@ end
 #        |  | |  \ |__] .   |  \ |___ ___] |  | |  | |    |___ |___ |  \       #
 #==============================================================================#
 
-function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
-    kernel             = self.kernel
-    xLen               = length( x )
-    bufLen             = iceil( xLen * kernel.rate ) + 1
-    buffer             = similar( x, bufLen )
-    bufIdx             = 1
-    history::Vector{T} = self.history
-    pfb::PFB{T}        = kernel.pfb
-    dpfb::PFB{T}       = kernel.dpfb
+function filt{Th,Tx}( self::FIRFilter{FIRArbitrary{Th}}, x::Vector{Tx} )
+    kernel              = self.kernel
+    pfb                 = kernel.pfb
+    dpfb                = kernel.dpfb
+    xLen                = length( x )
+    bufLen              = iceil( xLen * kernel.rate ) + 1
+    buffer              = Array(promote_type(Th,Tx), bufLen)
+    bufIdx              = 1
+    history::Vector{Tx} = self.history
 
     # Do we have enough input samples to produce one or more output samples?
     if xLen < kernel.inputDeficit
@@ -556,10 +555,8 @@ function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
     xIdx::Int = kernel.inputDeficit
 
     while xIdx <= xLen
-        yLower = zero(T)
-        yUpper = zero(T)
-        while kernel.𝜙Idx < kernel.N𝜙
 
+        while kernel.𝜙Idx < kernel.N𝜙
             if xIdx < kernel.tapsPer𝜙
                 yLower = unsafedot( pfb, kernel.𝜙Idx+1, history, x, xIdx )
                 yUpper = unsafedot( dpfb, kernel.𝜙Idx+1, history, x, xIdx )
@@ -568,10 +565,9 @@ function filt{T}( self::FIRFilter{FIRArbitrary}, x::Vector{T} )
                 yUpper = unsafedot( dpfb, kernel.𝜙Idx+1, x, xIdx )
             end
 
-            Δ = kernel.𝜙Virtual - kernel.𝜙Idx
-            buffer[bufIdx] = yLower + yUpper * Δ
-            bufIdx += 1
-
+            Δ                = kernel.𝜙Virtual - kernel.𝜙Idx
+            buffer[bufIdx]   = yLower + yUpper * Δ
+            bufIdx          += 1
             kernel.𝜙Virtual += kernel.N𝜙/kernel.rate
             kernel.𝜙Idx      = ifloor( kernel.𝜙Virtual )
         end
