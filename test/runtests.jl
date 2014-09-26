@@ -391,9 +391,9 @@ function test_all()
                     Tx in [Float32, Float64, Complex64, Complex128]
 
         h     = rand(Th, rand(16:128,1)[1] )
-        xLen  = int(rand( 100:2000, 1 )[1])
+        xLen  = int(rand( 200:300, 1 )[1])
         xLen  = xLen-mod( xLen, decimation )
-        x     = rand( Tx, xLen )
+        x     = Tx[1:xLen]
         ratio = interpolation//decimation
 
         if ratio == 1
