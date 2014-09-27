@@ -331,17 +331,18 @@ end
 #        |  | |  \ |__] .   |  \ |___ ___] |  | |  | |    |___ | | \| |__]     #
 #==============================================================================#
 
-function test_arbitrary( x, resampleRate, numFilters )
+function test_arbitrary( Th, x, resampleRate, numFilters )
     cutoffFreq      = 0.45
     transitionWidth = 0.05
     (hLen, β)       = Multirate.kaiserlength( transitionWidth, samplerate = numFilters )
     hLen            = iceil(  hLen/numFilters  ) .* numFilters
     h               = Multirate.firdes( hLen, cutoffFreq, DSP.kaiser, samplerate = 32, beta = β ) .* numFilters
+    h               = convert( Vector{Th}, h )
 
     @printf( "____ ____ ___      ____ ____ ____ ____ _  _ ___  _    _ _  _ ____\n" )
     @printf( "|__| |__/ |__]     |__/ |___ [__  |__| |\\/| |__] |    | |\\ | | __\n" )
     @printf( "|  | |  \\ |__] .   |  \\ |___ ___] |  | |  | |    |___ | | \\| |__]\n" )
-    @printf( "\n\nrate = %f, N𝜙 = %d, x::%s. xLen = %d, ", resampleRate, numFilters, string(typeof(x)), length(x) )
+    @printf( "\n\nh::%s, x::%s, rate = %f, N𝜙 = %d, xLen = %d, ", string(typeof(h)), string(typeof(x)), resampleRate, numFilters, length(x) )
 
     @printf( "\n\tNaive arbitrary resampling\n\t\t" )
     @time naiveResult = NaiveResamplers.naivefilt( h, x, resampleRate, numFilters )
@@ -385,15 +386,15 @@ end
 #==============================================================================#
 
 function test_all()
-    for interpolation in sort([1, unique(rand(2:64,8))] ),
-            decimation in sort([1, unique(rand(2:64,8))] ),
+    for interpolation in sort([1, unique(rand(2:32,8))] ),
+            decimation in sort([1, unique(rand(2:32,8))] ),
                 Th in [Float32, Float64],
                     Tx in [Float32, Float64, Complex64, Complex128]
 
         h     = rand(Th, rand(16:128,1)[1] )
         xLen  = int(rand( 200:300, 1 )[1])
         xLen  = xLen-mod( xLen, decimation )
-        x     = Tx[1:xLen]
+        x     = rand( Tx, xLen )
         ratio = interpolation//decimation
 
         if ratio == 1
@@ -411,7 +412,9 @@ function test_all()
 
         if num(ratio) == interpolation && den(ratio) == decimation && num(ratio) != 1 && den(ratio) != 1
             @test test_rational( h, x, ratio )
-            @test test_arbitrary( x, float64(ratio), 32 )
+            if Tx in [ Float32, Complex64 ]
+                @test test_arbitrary( Th, x, float64(ratio)+rand(), 32 )
+            end
         end
     end
 end
