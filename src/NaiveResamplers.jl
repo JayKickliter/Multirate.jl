@@ -8,8 +8,6 @@ function naivefilt( h::Vector, x::Vector, resamplerate::Rational = 1//1 )
     downfactor   = den( resamplerate )
     xLen         = length( x )
     xZeroStuffed = zeros( eltype(x), length( x ) * upfactor )
-    yLen         = int( ceil( length(x) * resamplerate ) )
-    y            = similar( x, yLen )
 
     for n in 0:length(x)-1
         xZeroStuffed[ n*upfactor+1 ] = x[ n+1 ]
@@ -24,27 +22,25 @@ end
 
 # Naive arbitrary resampler
 function naivefilt( h::Vector, x::Vector, resamplerate::FloatingPoint, numfilters::Integer = 32 )
-
     xLen          = length( x )
     xInterpolated = naivefilt( h, x, numfilters//1 )
-    xxLen         = length( xInterpolated )
+    xLen          = length( xInterpolated )
     yLen          = iceil( xLen * resamplerate )
     y             = similar( x, yLen )
     yIdx          = 1
-    xxIdxVirtual  = 1.0
-    xxIdxLower    = 1
-    xxIdxUpper    = 1
-    Δ             = 0.0
+    xIdx          = 1
+    α             = 0.0
+    (δ, 𝜙Stride)  = modf( numfilters/resamplerate )
+    𝜙Stride       = int( 𝜙Stride )
 
-    while xxIdxUpper <= xxLen
-        yLower       = xInterpolated[xxIdxLower]
-        yUpper       = xInterpolated[xxIdxUpper]
-        y[yIdx]      = yLower + Δ*( yUpper - yLower )
-        yIdx         = yIdx + 1
-        xxIdxVirtual = numfilters * ( yIdx - 1 ) / resamplerate + 1
-        xxIdxLower   = ifloor( xxIdxVirtual )
-        xxIdxUpper   = iceil( xxIdxVirtual )
-        Δ            = xxIdxVirtual - xxIdxLower
+    while xIdx < xLen
+        yLower  = xInterpolated[xIdx]
+        yUpper  = xInterpolated[xIdx+1]
+        y[yIdx] = yLower + α*( yUpper - yLower )
+        yIdx   += 1
+        α      += δ
+        xIdx   += ifloor( α ) + 𝜙Stride
+        α       = mod( α, 1.0 )
     end
 
     resize!( y, yIdx-1 )
