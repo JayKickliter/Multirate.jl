@@ -80,26 +80,39 @@ end
 
 
 # Arbitrary resampler FIR kernel
+# This kernel is different from the others in that it has two polyphase filtlter banks.
+# The the second filter bank, dpfb, is the derivative of pfb. The purpose of this is to
+# allow us to compute two y values, yLower & yUpper, whitout having to advance the input
+# index by 1. It makes the kernel simple by not having to store extra state in the case
+# when where's at the last polphase branch and the last available input sample. By using
+# a derivitive filter, we can always compute the output in that scenario.
+# See section 7.6.1 in [1] for a better explanation.
+
 type FIRArbitrary{T} <: FIRKernel
     rate::Float64
     pfb::PFB{T}
     dpfb::PFB{T}
     N𝜙::Int
+    𝜙Stride::Int
     tapsPer𝜙::Int
     𝜙Idx::Int
-    𝜙Virtual::Float64
+    α::Float64
+    δ::Float64
     inputDeficit::Int
+    xIdx::Int
 end
 
 function FIRArbitrary( h::Vector, rate::Real, N𝜙::Integer )
-    hΔ           = [diff( h ), 0]
+    dh           = [ diff( h ), 0 ]
     pfb          = flipud(polyize( h,  N𝜙 ))
-    dpfb         = flipud(polyize( hΔ, N𝜙 ))
+    dpfb         = flipud(polyize( dh, N𝜙 ))
     tapsPer𝜙     = size( pfb )[1]
-    𝜙Idx         = 0
-    𝜙Virtual     = 0.0
+    𝜙Idx         = 1
+    α            = 0.0
+    (δ, 𝜙Stride) = modf( N𝜙/rate )
     inputDeficit = 1
-    FIRArbitrary( rate, pfb, dpfb, N𝜙, tapsPer𝜙, 𝜙Idx, 𝜙Virtual, inputDeficit )
+    xIdx         = 1
+    FIRArbitrary( rate, pfb, dpfb, N𝜙, int( 𝜙Stride ), tapsPer𝜙, 𝜙Idx, α, δ, inputDeficit, xIdx )
 end
 
 
@@ -531,6 +544,26 @@ end
 #        |  | |  \ |__] .   |  \ |___ ___] |  | |  | |    |___ |___ |  \       #
 #==============================================================================#
 
+# Updates FIRArbitrary state. See Section 7.5.1 in [1].
+#   [1] uses a phase accumilator that increments by Δ (N𝜙/rate)
+#   The original implementation of update! used this method, but the numerical
+#   errors built up pretty quickly. Instead α is now incremented by δ, the
+#   fractional part of Δ. The phase index, 𝜙Idx, is now incremented by
+#   integer part of Δ plus the integer part of α. However, α should always
+#   be < 1. So α is first incremented by δ and may be greater than 1 at this
+#   point. We dont want to fix that until we add the integer part to 𝜙Idx first.
+#   I hope that makes sense.
+function update!( kernel::FIRArbitrary )
+    kernel.α    += kernel.δ
+    kernel.𝜙Idx += ifloor( kernel.α ) + kernel.𝜙Stride
+    kernel.α     = mod( kernel.α, 1.0 )
+
+    if kernel.𝜙Idx > kernel.N𝜙
+        kernel.xIdx += ifloor( (kernel.𝜙Idx-1) / kernel.N𝜙 )
+        kernel.𝜙Idx  = mod( (kernel.𝜙Idx-1), kernel.N𝜙 ) + 1
+    end
+end
+
 function filt{Th,Tx}( self::FIRFilter{FIRArbitrary{Th}}, x::Vector{Tx} )
     kernel              = self.kernel
     pfb                 = kernel.pfb
@@ -552,35 +585,25 @@ function filt{Th,Tx}( self::FIRFilter{FIRArbitrary{Th}}, x::Vector{Tx} )
     # We do this by seting inputIdx to inputDeficit which was calculated in the previous run.
     # InputDeficit is set to 1 when instantiation the FIRArbitrary kernel, that way the first
     #   input always produces an output.
-    xIdx::Int = kernel.inputDeficit
+    kernel.xIdx = kernel.inputDeficit
 
-    while xIdx <= xLen
-
-        while kernel.𝜙Idx < kernel.N𝜙
-            if xIdx < kernel.tapsPer𝜙
-                yLower = unsafedot( pfb, kernel.𝜙Idx+1, history, x, xIdx )
-                yUpper = unsafedot( dpfb, kernel.𝜙Idx+1, history, x, xIdx )
-            else
-                yLower = unsafedot( pfb, kernel.𝜙Idx+1, x, xIdx )
-                yUpper = unsafedot( dpfb, kernel.𝜙Idx+1, x, xIdx )
-            end
-
-            Δ                = kernel.𝜙Virtual - kernel.𝜙Idx
-            buffer[bufIdx]   = yLower + yUpper * Δ
-            bufIdx          += 1
-            kernel.𝜙Virtual += kernel.N𝜙/kernel.rate
-            kernel.𝜙Idx      = ifloor( kernel.𝜙Virtual )
+    while kernel.xIdx <= xLen
+        if kernel.xIdx < kernel.tapsPer𝜙
+            yLower = unsafedot( pfb,  kernel.𝜙Idx, history, x, kernel.xIdx )
+            yUpper = unsafedot( dpfb, kernel.𝜙Idx, history, x, kernel.xIdx )
+        else
+            yLower = unsafedot( pfb,  kernel.𝜙Idx, x, kernel.xIdx )
+            yUpper = unsafedot( dpfb, kernel.𝜙Idx, x, kernel.xIdx )
         end
-
-        xIdx           += ifloor( kernel.𝜙Idx / kernel.N𝜙 )
-        kernel.𝜙Virtual = mod( kernel.𝜙Virtual, kernel.N𝜙 )
-        kernel.𝜙Idx     = ifloor( kernel.𝜙Virtual )
+        buffer[bufIdx] = yLower + yUpper * kernel.α
+        bufIdx        += 1
+        update!( kernel )
     end
 
     # Did we overestimate needed buffer size?
     # TODO: Get rid of this by correctly calculating output size.
     bufLen == bufIdx - 1 || resize!( buffer, bufIdx - 1)
-    kernel.inputDeficit = xIdx - xLen
+    kernel.inputDeficit = kernel.xIdx - xLen
 
     self.history = shiftin!( history, x )
 
@@ -605,3 +628,16 @@ function filt( h::Vector, x::Vector, rate::FloatingPoint, N𝜙::Integer = 32 )
     self = FIRFilter( h, rate, N𝜙 )
     filt( self, x )
 end
+
+
+
+
+#==============================================================================#
+#                   ____ _ ___ ____ ___ _ ____ _  _ ____                       #
+#                   |    |  |  |__|  |  | |  | |\ | [__                        #
+#                   |___ |  |  |  |  |  | |__| | \| ___]                       #
+#==============================================================================#
+
+# [1] F.J. Harris, *Multirate Signal Processing for Communication Systems*. Prentice Hall, 2004
+# [2] Dick, C.; Harris, F., "Options for arbitrary resamplers in FPGA-based modulators," Signals, Systems and Computers, 2004. Conference Record of the Thirty-Eighth Asilomar Conference on , vol.1, no., pp.777,781 Vol.1, 7-10 Nov. 2004
+# [3] Kim, S.C.; Plishker, W.L.; Bhattacharyya, S.S., "An efficient GPU implementation of an arbitrary resampling polyphase channelizer," Design and Architectures for Signal and Image Processing (DASIP), 2013 Conference on, vol., no., pp.231,238, 8-10 Oct. 2013
