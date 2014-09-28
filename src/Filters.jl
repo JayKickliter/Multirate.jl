@@ -30,7 +30,7 @@ type FIRInterpolator <: FIRKernel
     tapsPer𝜙::Int
     function FIRInterpolator( h::Vector, interpolation::Integer )
         self               = new()
-        self.pfb           = flipud( polyize( h, interpolation ) )
+        self.pfb           = flipud( taps2pfb( h, interpolation ) )
         self.tapsPer𝜙      = size( self.pfb )[1]
         self.N𝜙            = size( self.pfb )[2]
         self.interpolation = interpolation
@@ -67,7 +67,7 @@ type FIRRational  <: FIRKernel
     inputDeficit::Int
     function FIRRational( h::Vector, ratio::Rational )
         self              = new()
-        self.pfb          = flipud( polyize( h, num(ratio) ))
+        self.pfb          = flipud( taps2pfb( h, num(ratio) ))
         self.ratio        = ratio
         self.N𝜙           = size( self.pfb )[2]
         self.tapsPer𝜙     = size( self.pfb )[1]
@@ -104,8 +104,8 @@ end
 
 function FIRArbitrary( h::Vector, rate::Real, N𝜙::Integer )
     dh           = [ diff( h ), 0 ]
-    pfb          = flipud(polyize( h,  N𝜙 ))
-    dpfb         = flipud(polyize( dh, N𝜙 ))
+    pfb          = flipud(taps2pfb( h,  N𝜙 ))
+    dpfb         = flipud(taps2pfb( dh, N𝜙 ))
     tapsPer𝜙     = size( pfb )[1]
     𝜙Idx         = 1
     α            = 0.0
@@ -198,13 +198,13 @@ end
 # Converts a vector of coefficients to a matrix. Each column is a filter.
 # Appends zeros if necessary.
 # Example:
-#   julia> polyize( [1:9], 4 )
+#   julia> taps2pfb( [1:9], 4 )
 #   3x4 Array{Int64,2}:
 #    1  2  3  4
 #    5  6  7  8
 #    9  0  0  0
 
-function polyize{T}( h::Vector{T}, N𝜙::Integer )
+function taps2pfb{T}( h::Vector{T}, N𝜙::Integer )
     hLen      = length( h )
     hLenPer𝜙  = iceil(  hLen/N𝜙  )
     pfbSize   = hLenPer𝜙 * N𝜙

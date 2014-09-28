@@ -22,7 +22,7 @@ export  firdes,
 
 include( "Filters.jl" )
 export  FIRFilter,
-        polyize,
+        taps2pfb,
         filt!,
         filt,
         reset,
