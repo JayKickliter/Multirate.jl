@@ -1,5 +1,6 @@
 import Multirate
 import Multirate: NaiveResamplers
+using Base.Test
 
 function Base.isapprox( x1::Vector, x2::Vector )
     Nx1 = length( x1 )
@@ -20,19 +21,21 @@ function Base.isapprox( x1::Vector, x2::Vector )
     return true
 end
 
-numFilters   = 10
-x            = [1.0:101]
-resampleRate = 0.27
+Tx           = Float32
+Th           = Float32
+numFilters   = 32
+x            = Tx[1.0:101]
+resampleRate = 33/32
 
 cutoffFreq      = 0.45
 transitionWidth = 0.05
 (hLen, β)       = Multirate.kaiserlength( transitionWidth, samplerate = numFilters )
 hLen            = iceil(  hLen/numFilters  ) .* numFilters
 h               = Multirate.firdes( hLen, cutoffFreq, DSP.kaiser, samplerate = numFilters, beta = β ) .* numFilters
-h               = convert( Vector{Float32}, h)
+h               = convert( Vector{Th}, h)
 
-@printf( "\n\tStateless arbitrary resampling\n\t\t" )
-self = Multirate.FIRFilter( h, resampleRate, numFilters )
-@time yStateless = Multirate.filt( self, x )
+@time yNaive = NaiveResamplers.naivefilt( h, x, resampleRate, numFilters )
+@time yArb   = Multirate.filt( h, x, resampleRate )
 
-display( yStateless )
+commonLen = min( length(yNaive), length(yArb) )
+isapprox( yNaive[1:commonLen], yArb[1:commonLen] ) ||  display( [ [1:commonLen] yNaive[1:commonLen] yArb[1:commonLen] yNaive[1:commonLen].-yArb[1:commonLen]] )
