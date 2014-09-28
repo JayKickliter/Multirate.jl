@@ -10,7 +10,7 @@ end
 
 # Convert a polyphase filterbank into a polynomial filterbank
 function pfb2pnfb{T}( pfb::PFB{T}, polyorder )
-    (tapsPer𝜙, N𝜙) = size( pfb`` )
+    (tapsPer𝜙, N𝜙) = size( pfb )
     result         = Array( Poly{T}, tapsPer𝜙 )
 
     for i in 1:tapsPer𝜙
@@ -37,6 +37,7 @@ type FIRFarrow{T} <: FIRKernel
     rate::Float64
     pfb::PFB{T}
     pnfb::PNFB{T}
+    currentTaps::Vector{T}
     N𝜙::Int
     tapsPer𝜙::Int
     𝜙Idx::Float64
@@ -45,15 +46,16 @@ type FIRFarrow{T} <: FIRKernel
     xIdx::Int
 end
 
-function FIRFarrow( h::Vector, rate::Real, N𝜙::Integer, polyorder::Integer )
+function FIRFarrow{Th}( h::Vector{Th}, rate::Real, N𝜙::Integer, polyorder::Integer )
     pfb          = flipud(taps2pfb( h,  N𝜙 ))
-    pnfb         = pfb2pnfb( pfb, polyorder::Integer )
+    pnfb         = pfb2pnfb( pfb, polyorder )
     tapsPer𝜙     = size( pfb )[1]
     𝜙Idx         = 1.0
     Δ            = N𝜙/rate
     inputDeficit = 1
     xIdx         = 1
-    FIRFarrow( rate, pfb, pnfb, N𝜙, tapsPer𝜙, 𝜙Idx, Δ, inputDeficit, xIdx )
+    currentTaps  = Th[ polyval( pnfb[tapIdx], 𝜙Idx ) for tapIdx in 1:tapsPer𝜙 ]
+    FIRFarrow( rate, pfb, pnfb, currentTaps, N𝜙, tapsPer𝜙, 𝜙Idx, Δ, inputDeficit, xIdx )
 end
 
 function update!( kernel::FIRFarrow )
@@ -63,16 +65,20 @@ function update!( kernel::FIRFarrow )
         kernel.xIdx += ifloor( (kernel.𝜙Idx-1) / kernel.N𝜙 )
         kernel.𝜙Idx  = mod( (kernel.𝜙Idx-1), kernel.N𝜙 ) + 1
     end
+    
+    for tapIdx in 1:kernel.tapsPer𝜙
+        @inbounds kernel.currentTaps[tapIdx] = polyval( kernel.pnfb[tapIdx], kernel.𝜙Idx )
+    end
 end
 
 function filt{Th,Tx}( self::FIRFilter{FIRFarrow{Th}}, x::Vector{Tx} )
     kernel              = self.kernel
-    pnfb                = kernel.pnfb
     xLen                = length( x )
     bufLen              = iceil( xLen * kernel.rate ) + 1
     buffer              = zeros(promote_type(Th,Tx), bufLen)
     bufIdx              = 1
     history::Vector{Tx} = self.history
+    db_𝜙vec             = Array( Float64, bufLen )
 
     # Do we have enough input samples to produce one or more output samples?
     if xLen < kernel.inputDeficit
@@ -82,22 +88,16 @@ function filt{Th,Tx}( self::FIRFilter{FIRFarrow{Th}}, x::Vector{Tx} )
     end
 
     # Skip over input samples that are not needed to produce output results.
-    # We do this by seting inputIdx to inputDeficit which was calculated in the previous run.
-    # InputDeficit is set to 1 when instantiation the FIRFarrow kernel, that way the first
-    #   input always produces an output.
     kernel.xIdx = kernel.inputDeficit
 
-    while kernel.xIdx <= xLen
-
-        println( "n = $bufIdx, xIdx = $(kernel.xIdx), Δ = $(kernel.Δ), 𝜙Idx = $(kernel.𝜙Idx)" )
-        taps = [ polyval( kernel.pnfb[i], kernel.𝜙Idx ) for i in 1:kernel.tapsPer𝜙 ]
-
+    while kernel.xIdx <= xLen        
+        db_𝜙vec[bufIdx] = kernel.𝜙Idx
         if kernel.xIdx < kernel.tapsPer𝜙
-            y = unsafedot( taps, self.history, x, kernel.xIdx )
+            y = unsafedot( kernel.currentTaps, history, x, kernel.xIdx )
         else
-            y = unsafedot( taps, self.history, x, kernel.xIdx )
+            y = unsafedot( kernel.currentTaps, x, kernel.xIdx )
         end
-        buffer[bufIdx] = y
+        @inbounds buffer[bufIdx] = y
         bufIdx        += 1
         update!( kernel )
     end
@@ -105,11 +105,12 @@ function filt{Th,Tx}( self::FIRFilter{FIRFarrow{Th}}, x::Vector{Tx} )
     # Did we overestimate needed buffer size?
     # TODO: Get rid of this by correctly calculating output size.
     bufLen == bufIdx - 1 || resize!( buffer, bufIdx - 1)
+    resize!( db_𝜙vec, length(buffer) )
     kernel.inputDeficit = kernel.xIdx - xLen
 
     self.history = shiftin!( history, x )
 
-    return buffer
+    return (buffer, db_𝜙vec)
 end
 
 function FIRFilter( h::Vector, rate::FloatingPoint, N𝜙::Integer, polyorder::Integer )
@@ -118,4 +119,9 @@ function FIRFilter( h::Vector, rate::FloatingPoint, N𝜙::Integer, polyorder::I
     historyLen = kernel.tapsPer𝜙 - 1
     history    = zeros( historyLen )
     FIRFilter( kernel, history, historyLen )
+end
+
+function filt( h::Vector, x::Vector, rate::FloatingPoint, N𝜙::Integer, polyorder::Integer )
+    self = FIRFilter( h, rate, N𝜙, polyorder )
+    filt( self, x )
 end
