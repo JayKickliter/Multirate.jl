@@ -10,7 +10,7 @@ export  hanning,
         kaiser,
         blackman
 
-include( "unsafemath.jl" )
+include( "support.jl" )
 include( "FIRDesign.jl" )
 export  firdes,
         kaiserlength,
