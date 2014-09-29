@@ -7,7 +7,7 @@ function unsafedot( a::Matrix, aColIdx::Integer, b::Vector, bLastIdx::Integer )
     bBaseIdx = bLastIdx - aLen
     dotprod  = a[ 1, aColIdx ] * b[ bBaseIdx + 1 ]
     @simd for i in 2:aLen
-        @inbounds dotprod += a[ i, aColIdx ] * b[ bBaseIdx + i ]
+        #= @inbounds =# dotprod += a[ i, aColIdx ] * b[ bBaseIdx + i ]
     end
 
     return dotprod
@@ -21,10 +21,10 @@ function unsafedot{T}( a::Matrix, aColIdx::Integer, b::Vector{T}, c::Vector{T}, 
 
     dotprod = a[ 1, aColIdx] * b[ cLastIdx ]
     @simd for i in 2:aLen-cLastIdx
-        @inbounds dotprod += a[ i, aColIdx ] * b[ i+cLastIdx-1 ]
+        #= @inbounds =# dotprod += a[ i, aColIdx ] * b[ i+cLastIdx-1 ]
     end
     @simd for i in 1:cLastIdx
-        @inbounds dotprod += a[ aLen-cLastIdx+i, aColIdx ] * c[ i ]
+        #= @inbounds =# dotprod += a[ aLen-cLastIdx+i, aColIdx ] * c[ i ]
     end
 
     return dotprod
@@ -35,7 +35,7 @@ function unsafedot( a::Vector, b::Vector, bLastIdx::Integer )
     bBaseIdx = bLastIdx - aLen
     dotprod  = a[ 1 ] * b[ bBaseIdx + 1 ]
     @simd for i in 2:aLen
-        @inbounds dotprod += a[ i ] * b[ bBaseIdx + i ]
+        #= @inbounds =# dotprod += a[ i ] * b[ bBaseIdx + i ]
     end
 
     return dotprod
@@ -45,10 +45,10 @@ function unsafedot{T}( a::Vector, b::Vector{T}, c::Vector{T}, cLastIdx::Integer 
     aLen    = length(a)
     dotprod = zero(a[1]*b[1])
     @simd for i in 1:aLen-cLastIdx
-        @inbounds dotprod += a[ i ] * b[ i+cLastIdx-1 ]
+        #= @inbounds =# dotprod += a[ i ] * b[ i+cLastIdx-1 ]
     end
     @simd for i in 1:cLastIdx
-        @inbounds dotprod += a[ aLen-cLastIdx+i ] * c[ i ]
+        #= @inbounds =# dotprod += a[ aLen-cLastIdx+i ] * c[ i ]
     end
 
     return dotprod
@@ -67,11 +67,11 @@ function shiftin!{T}( a::Vector{T}, b::Vector{T} )
     else
 
         for i in 1:aLen-bLen
-            @inbounds a[i] = a[i+bLen]
+            #= @inbounds =# a[i] = a[i+bLen]
         end
         bIdx = 1
         for i in aLen-bLen+1:aLen
-            @inbounds a[i] = b[bIdx]
+            #= @inbounds =# a[i] = b[bIdx]
             bIdx += 1
         end
     end
