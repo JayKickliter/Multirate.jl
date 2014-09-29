@@ -573,6 +573,8 @@ function filt{Th,Tx}( self::FIRFilter{FIRArbitrary{Th}}, x::Vector{Tx} )
     buffer              = Array(promote_type(Th,Tx), bufLen)
     bufIdx              = 1
     history::Vector{Tx} = self.history
+    db_vec_phi          = Array(Float64, bufLen)
+    db_vec_xidx         = Array(Int, bufLen)
 
     # Do we have enough input samples to produce one or more output samples?
     if xLen < kernel.inputDeficit
@@ -588,6 +590,8 @@ function filt{Th,Tx}( self::FIRFilter{FIRArbitrary{Th}}, x::Vector{Tx} )
     kernel.xIdx = kernel.inputDeficit
 
     while kernel.xIdx <= xLen
+        db_vec_xidx[bufIdx] = kernel.xIdx
+        db_vec_phi[bufIdx]  = kernel.𝜙Idx + kernel.α
         if kernel.xIdx < kernel.tapsPer𝜙
             yLower = unsafedot( pfb,  kernel.𝜙Idx, history, x, kernel.xIdx )
             yUpper = unsafedot( dpfb, kernel.𝜙Idx, history, x, kernel.xIdx )
@@ -607,7 +611,10 @@ function filt{Th,Tx}( self::FIRFilter{FIRArbitrary{Th}}, x::Vector{Tx} )
 
     self.history = shiftin!( history, x )
 
-    return buffer
+    resize!( db_vec_phi, length(buffer) )
+    resize!( db_vec_xidx, length(buffer) )    
+    return buffer, db_vec_xidx, db_vec_phi
+    # return buffer
 end
 
 
