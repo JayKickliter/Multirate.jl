@@ -1,6 +1,27 @@
 using Winston
 using Multirate
 
+function tapsforphase!{T}( buffer::Vector{T}, kernel::Multirate.FIRArbitrary{T}, phase::Real )
+    buffer = Array(T,kernel.tapsPer𝜙)
+
+    0 <= phase <= kernel.N𝜙 + 1         || error( "phase must be >= 0 and <= N𝜙+1" )
+    length( buffer ) >= kernel.tapsPer𝜙 || error( "buffer is too small" )
+
+    (α, 𝜙Idx) = modf( phase )
+    𝜙Idx      = int( 𝜙Idx )
+
+    for tapIdx in 1:kernel.tapsPer𝜙
+        buffer[tapIdx] = kernel.pfb[tapIdx,𝜙Idx] + α*kernel.dpfb[tapIdx,𝜙Idx]
+    end
+    buffer
+end
+
+function tapsforphase{T}( kernel::Multirate.FIRArbitrary{T}, phase::Real )
+    buffer = Array(T,kernel.tapsPer𝜙)
+    tapsforphase!( buffer, kernel, phase )
+end
+
+
 function plotphase( farrowfilt::FIRFilter, phase::Real )
     farrowkernel = farrowfilt.kernel
     pntaps       = [ Polynomials.polyval( farrowkernel.pnfb[tapIdx], phase  ) for tapIdx in 1:farrowkernel.tapsPer𝜙 ]
@@ -16,17 +37,16 @@ function plotphase( farrowfilt::FIRFilter, arbfilt::FIRFilter, phase::Real, show
     arbkernel    = arbfilt.kernel
     tapsPer𝜙     = farrowkernel.tapsPer𝜙
     farrowtaps   = [ Polynomials.polyval( farrowkernel.pnfb[tapIdx], phase  ) for tapIdx in 1:tapsPer𝜙 ]
-    arbtaps      = arbkernel.pfb[:,𝜙Idx] .+ α*arbkernel.dpfb[:,𝜙Idx]
-
+    arbtaps      = tapsforphase( arbkernel, phase ) #arbkernel.pfb[:,𝜙Idx] .+ α*arbkernel.dpfb[:,𝜙Idx]
+    p::FramedPlot
     if showdelta
         tapsdelta   = arbtaps.-farrowtaps
         p           = plot( tapsdelta )
-        display( p )
     else
         x = 1:tapsPer𝜙
         p = plot( x, arbtaps, x, farrowtaps )
-        display( p )
     end
+    display(p)
 end
 
 function plotrow( farrowfilt::FIRFilter, tapIdx::Real, showdelta = false )
