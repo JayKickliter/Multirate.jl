@@ -231,7 +231,7 @@ function test_interpolation( h, x, interpolation )
         return true
     end
 
-    display( [ baseResult statefulResult piecewiseResult ] )
+    display( [ [1:length(baseResult)] baseResult statefulResult piecewiseResult ] )
 
     return false
 end
