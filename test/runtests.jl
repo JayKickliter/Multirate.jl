@@ -76,7 +76,7 @@ function test_singlerate( h, x )
     statefulResult = [ y1, y2 ]
 
     @printf( "\n\tMultirate.filt filt. Piecewise for first %d inputs\n\t\t", length( x1 ) )
-    Multirate.reset( self )
+    Multirate.reset!( self )
     @time begin
         for i in 1:length(x1)
             y1[i] = Multirate.filt( self, x1[i:i] )[1]
@@ -144,7 +144,7 @@ function test_decimation( h, x, decimation )
     statefulResult = [ y1, y2 ]
 
     @printf( "\n\tMultirate.filt decimation. Piecewise for first %d inputs.\n\t\t", length( x1 ) )
-    Multirate.reset( self )
+    Multirate.reset!( self )
     y1 = similar( x, 0 )
     @time begin
         for i in 1:length(x1)
@@ -217,7 +217,7 @@ function test_interpolation( h, x, interpolation )
     statefulResult = [ y1, y2 ]
 
     @printf( "\n\tMultirate.filt interpolation. Piecewise for first %d inputs\n\t\t", length( x1 ) )
-    Multirate.reset( self )
+    Multirate.reset!( self )
     y1 = similar( x, 0 )
     @time begin
         for i in 1:length(x1)
