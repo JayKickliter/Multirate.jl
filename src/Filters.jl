@@ -31,7 +31,7 @@ type FIRInterpolator <: FIRKernel
     tapsPer𝜙::Int
     function FIRInterpolator( h::Vector, interpolation::Integer )
         self               = new()
-        self.pfb           = flipud( taps2pfb( h, interpolation ) )
+        self.pfb           = taps2pfb( h, interpolation )
         self.tapsPer𝜙      = size( self.pfb )[1]
         self.N𝜙            = size( self.pfb )[2]
         self.interpolation = interpolation
@@ -68,7 +68,7 @@ type FIRRational  <: FIRKernel
     inputDeficit::Int
     function FIRRational( h::Vector, ratio::Rational )
         self              = new()
-        self.pfb          = flipud( taps2pfb( h, num(ratio) ))
+        self.pfb          = taps2pfb( h, num(ratio) )
         self.ratio        = ratio
         self.N𝜙           = size( self.pfb )[2]
         self.tapsPer𝜙     = size( self.pfb )[1]
@@ -105,8 +105,8 @@ end
 
 function FIRArbitrary( h::Vector, rate::Real, N𝜙::Integer )
     dh           = [ diff( h ), 0 ]
-    pfb          = flipud(taps2pfb( h,  N𝜙 ))
-    dpfb         = flipud(taps2pfb( dh, N𝜙 ))
+    pfb          = taps2pfb( h,  N𝜙 )
+    dpfb         = taps2pfb( dh, N𝜙 )
     tapsPer𝜙     = size( pfb )[1]
     𝜙Idx         = 1
     α            = 0.0
@@ -134,7 +134,7 @@ type FIRFarrow{T} <: FIRKernel
 end
 
 function FIRFarrow{T}( h::Vector{T}, rate::Real, N𝜙::Integer, polyorder::Integer )
-    pfb          = flipud(taps2pfb( h,  N𝜙 ))
+    pfb          = taps2pfb( h,  N𝜙 )
     pnfb         = pfb2pnfb( pfb, polyorder )
     tapsPer𝜙     = size( pfb )[1]
     𝜙Idx         = 1.0
@@ -235,29 +235,32 @@ end
 #==============================================================================#
 
 # Converts a vector of coefficients to a matrix. Each column is a filter.
+# NOTE: also flips the matrix up/down so computing the dot product of a
+#       column with a signal vector is more efficient (since filter is convolution)
 # Appends zeros if necessary.
 # Example:
 #   julia> taps2pfb( [1:9], 4 )
 #   3x4 Array{Int64,2}:
-#    1  2  3  4
-#    5  6  7  8
 #    9  0  0  0
+#    5  6  7  8
+#    1  2  3  4
+#
+#  In this example, the first phase, or 𝜙, is [9, 5, 1].
 
 function taps2pfb{T}( h::Vector{T}, N𝜙::Integer )
-    hLen      = length( h )
-    tapsPer𝜙  = iceil(  hLen/N𝜙  )
-    pfbSize   = tapsPer𝜙 * N𝜙
+    hLen     = length( h )
+    tapsPer𝜙 = iceil( hLen/N𝜙 )
+    pfbSize  = tapsPer𝜙 * N𝜙
+    pfb      = Array( T, tapsPer𝜙, N𝜙 )
+    hIdx     = 1
 
-    if hLen != pfbSize                                # check that the vector is an integer multiple of N𝜙
-        hExtended             = similar( h, pfbSize ) # No? extend and zero pad
-        hExtended[1:hLen]     = h
-        hExtended[hLen+1:end] = 0
-        h                     = hExtended
+    for rowIdx in tapsPer𝜙:-1:1, colIdx in 1:N𝜙
+        tap = hIdx > hLen ? zero(T) : h[hIdx]
+        @inbounds pfb[rowIdx,colIdx] = tap
+        hIdx += 1
     end
 
-    hLen      = length( h )
-    tapsPer𝜙  = int( hLen/N𝜙 )
-    pfb       = reshape( h, N𝜙, tapsPer𝜙 )'
+    return pfb
 end
 
 
@@ -652,7 +655,7 @@ function filt{Th,Tx}( self::FIRFilter{FIRArbitrary{Th}}, x::Vector{Tx} )
     buffer              = Array(promote_type(Th,Tx), bufLen)
     bufIdx              = 1
     history::Vector{Tx} = self.history
-    # TODO: Remove when arb and farrow filters are rock-solid.    
+    # TODO: Remove when arb and farrow filters are rock-solid.
     # db_vec_phi          = Array(Float64, bufLen)
     # db_vec_xidx         = Array(Int, bufLen)
 
@@ -670,7 +673,7 @@ function filt{Th,Tx}( self::FIRFilter{FIRArbitrary{Th}}, x::Vector{Tx} )
     kernel.xIdx = kernel.inputDeficit
 
     while kernel.xIdx <= xLen
-        # TODO: Remove when arb and farrow filters are rock-solid.        
+        # TODO: Remove when arb and farrow filters are rock-solid.
         # db_vec_xidx[bufIdx] = kernel.xIdx
         # db_vec_phi[bufIdx]  = kernel.𝜙Idx + kernel.α
         if kernel.xIdx < kernel.tapsPer𝜙
@@ -716,7 +719,7 @@ function tapsforphase!{T}( buffer::Vector{T}, kernel::FIRFarrow{T}, phase::Real 
     for tapIdx in 1:kernel.tapsPer𝜙
         buffer[tapIdx] = polyval( kernel.pnfb[tapIdx], phase  )
     end
-    
+
     return buffer
 end
 
@@ -748,7 +751,7 @@ function filt{Th,Tx}( self::FIRFilter{FIRFarrow{Th}}, x::Vector{Tx} )
     buffer              = zeros(promote_type(Th,Tx), bufLen)
     bufIdx              = 1
     history::Vector{Tx} = self.history
-    # TODO: Remove when arb and farrow filters are rock-solid.    
+    # TODO: Remove when arb and farrow filters are rock-solid.
     # db_vec_phi          = Array(Float64, bufLen)
     # db_vec_xidx         = Array(Int, bufLen)
 
@@ -763,7 +766,7 @@ function filt{Th,Tx}( self::FIRFilter{FIRFarrow{Th}}, x::Vector{Tx} )
     kernel.xIdx = kernel.inputDeficit
 
     while kernel.xIdx <= xLen
-        # TODO: Remove when arb and farrow filters are rock-solid.        
+        # TODO: Remove when arb and farrow filters are rock-solid.
         # db_vec_xidx[bufIdx] = kernel.xIdx
         # db_vec_phi[bufIdx]  = kernel.𝜙Idx
         if kernel.xIdx < kernel.tapsPer𝜙
@@ -785,7 +788,7 @@ function filt{Th,Tx}( self::FIRFilter{FIRFarrow{Th}}, x::Vector{Tx} )
 
     # TODO: Remove when arb and farrow filters are rock-solid.
     # resize!( db_vec_phi, length(buffer) )
-    # resize!( db_vec_xidx, length(buffer) ) 
+    # resize!( db_vec_xidx, length(buffer) )
     # return buffer, db_vec_xidx, db_vec_phi
     return buffer
 end
@@ -811,7 +814,7 @@ function filt( h::Vector, x::Vector, rate::FloatingPoint, N𝜙::Integer = 32 )
     filt( self, x )
 end
 
-# Arbitrary resampling with polyphase interpolation and polynomial generated intra-phase taps. 
+# Arbitrary resampling with polyphase interpolation and polynomial generated intra-phase taps.
 function filt( h::Vector, x::Vector, rate::FloatingPoint, N𝜙::Integer, polyorder::Integer )
     self = FIRFilter( h, rate, N𝜙, polyorder )
     filt( self, x )
