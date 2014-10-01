@@ -624,6 +624,15 @@ end
 #        |  | |  \ |__] .   |  \ |___ ___] |  | |  | |    |___ |___ |  \       #
 #==============================================================================#
 
+function setphase!( kernel::FIRArbitrary, 𝜙::Number )
+    (α, 𝜙Idx)   = modf( 𝜙/(2*pi)*kernel.N𝜙 )
+    kernel.𝜙Idx = 𝜙Idx
+    kernel.α    = α
+    return 𝜙Idx, α
+end
+
+setphase!{T}( self::FIRFilter{FIRArbitrary{T}}, 𝜙::Number ) = setphase!( self.kernel, 𝜙 )
+
 # Updates FIRArbitrary state. See Section 7.5.1 in [1].
 #   [1] uses a phase accumilator that increments by Δ (N𝜙/rate)
 #   The original implementation of update! used this method, but the numerical
