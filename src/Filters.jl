@@ -274,7 +274,7 @@ end
 
 # Convert a polyphase filterbank into a polynomial filterbank
 
-function pfb2pnfb{T}( pfb::PFB{T}, polyorder )
+function pfb2pnfb{T}( pfb::PFB{T}, polyorder::Integer )
     (tapsPer𝜙, N𝜙) = size( pfb )
     result         = Array( Poly{T}, tapsPer𝜙 )
 
@@ -284,6 +284,23 @@ function pfb2pnfb{T}( pfb::PFB{T}, polyorder )
     end
 
     return result
+end
+
+function taps2pnfb{T}( h::Vector{T}, N𝜙::Integer, polyorder::Integer )
+    hLen     = length( h )
+    tapsPer𝜙 = iceil( hLen/N𝜙 )
+    pnfb     = Array( Poly{T}, tapsPer𝜙 )
+    pfbSize  = N𝜙 * tapsPer𝜙
+    h        = hLen < pfbSize + 1 ? [ h, zeros( T, pfbSize+1-hLen ) ] : h
+
+    pnfbIdx = tapsPer𝜙
+    for startIdx in 0:N𝜙:hLen-N𝜙
+        row           = h[startIdx+1:startIdx+N𝜙+1]
+        pnfb[pnfbIdx] = polyfit( row, polyorder )
+        pnfbIdx      -= 1
+    end
+
+    return pnfb
 end
 
 
