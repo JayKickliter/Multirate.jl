@@ -4,12 +4,13 @@
 #        |    |   |    |___ ___]    /      |___ |__| | \| ___]  |  |  \ .      #
 #==============================================================================#
 
-typealias PFB{T} Matrix{T}
+typealias PFB{T} Matrix{T}          # polyphase filter bank
+typealias PNFB{T} Vector{Poly{T}}   # polynomial filter bank (used for farrow filter)
 
 abstract Filter
 abstract FIRKernel
 
-# Single rate FIR kernel, just hold filter h
+# Single rate FIR kernel
 type FIRStandard <: FIRKernel
     h::Vector
     hLen::Int
@@ -116,6 +117,34 @@ function FIRArbitrary( h::Vector, rate::Real, N𝜙::Integer )
 end
 
 
+# Farrow filter kernel.
+# Takes a polyphase filterbank and converts each row of taps into a polynomial.
+# That we can calculate filter tap values for any arbitrary 𝜙Idx, not just integers between 1 and N𝜙
+type FIRFarrow{T} <: FIRKernel
+    rate::Float64
+    pfb::PFB{T}
+    pnfb::PNFB{T}
+    currentTaps::Vector{T}
+    N𝜙::Int
+    tapsPer𝜙::Int
+    𝜙Idx::Float64
+    Δ::Float64
+    inputDeficit::Int
+    xIdx::Int
+end
+
+function FIRFarrow{T}( h::Vector{T}, rate::Real, N𝜙::Integer, polyorder::Integer )
+    pfb          = flipud(taps2pfb( h,  N𝜙 ))
+    pnfb         = pfb2pnfb( pfb, polyorder )
+    tapsPer𝜙     = size( pfb )[1]
+    𝜙Idx         = 1.0
+    Δ            = N𝜙/rate
+    inputDeficit = 1
+    xIdx         = 1
+    currentTaps  = T[ polyval( pnfb[tapIdx], 𝜙Idx ) for tapIdx in 1:tapsPer𝜙 ]
+    FIRFarrow( rate, pfb, pnfb, currentTaps, N𝜙, tapsPer𝜙, 𝜙Idx, Δ, inputDeficit, xIdx )
+end
+
 
 # FIRFilter - the kernel does the heavy lifting
 type FIRFilter{Tk<:FIRKernel} <: Filter
@@ -124,6 +153,7 @@ type FIRFilter{Tk<:FIRKernel} <: Filter
     historyLen::Int
 end
 
+# Constructor for single-rate, decimating, interpolating, and rational resampling filters
 function FIRFilter( h::Vector, resampleRatio::Rational = 1//1 )
     interpolation = num( resampleRatio )
     decimation    = den( resampleRatio )
@@ -136,7 +166,7 @@ function FIRFilter( h::Vector, resampleRatio::Rational = 1//1 )
         kernel     = FIRDecimator( h, decimation )
         historyLen = kernel.hLen - 1
     elseif decimation == 1                                    # interpolate
-        kernel        = FIRInterpolator( h, interpolation )
+        kernel     = FIRInterpolator( h, interpolation )
         historyLen = kernel.tapsPer𝜙 - 1
     else                                                      # rational
         kernel     = FIRRational( h, resampleRatio )
@@ -148,6 +178,7 @@ function FIRFilter( h::Vector, resampleRatio::Rational = 1//1 )
     FIRFilter( kernel, history, historyLen )
 end
 
+# Constructor for arbitrary resampling filter (polyphase interpolator w/ intra-phase linear interpolation )
 function FIRFilter( h::Vector, rate::FloatingPoint, N𝜙::Integer = 32 )
     rate > 0.0 || error( "rate must be greater than 0" )
     kernel     = FIRArbitrary( h, rate, N𝜙 )
@@ -156,6 +187,14 @@ function FIRFilter( h::Vector, rate::FloatingPoint, N𝜙::Integer = 32 )
     FIRFilter( kernel, history, historyLen )
 end
 
+# Constructor for farrow filter (polyphase interpolator w/ polynomial genrated intra-phase taps )
+function FIRFilter( h::Vector, rate::FloatingPoint, N𝜙::Integer, polyorder::Integer )
+    rate > 0.0 || error( "rate must be greater than 0" )
+    kernel     = FIRFarrow( h, rate, N𝜙, polyorder )
+    historyLen = kernel.tapsPer𝜙 - 1
+    history    = zeros( historyLen )
+    FIRFilter( kernel, history, historyLen )
+end
 
 
 
@@ -168,21 +207,21 @@ end
 # Resets filter and its kernel to an initial state
 
 # Does nothing for non-rational kernels
-reset( self::FIRKernel ) = self
+reset!( self::FIRKernel ) = self
 
 # For rational kernel, set 𝜙Idx back to 1
-reset( self::FIRRational ) = self.𝜙Idx = 1
+reset!( self::FIRRational ) = self.𝜙Idx = 1
 
 # For rational kernel, set 𝜙Idx back to 1
-function reset( self::FIRArbitrary )
+function reset!( self::FIRArbitrary )
     self.yCount = 0
     update!( self )
 end
 
-# For FIRFilter, set delay line to zeros of same tyoe and required length
-function reset( self::FIRFilter )
+# For FIRFilter, set history vector to zeros of same type and required length
+function reset!( self::FIRFilter )
     self.history = zeros( eltype( self.history ), self.historyLen )
-    reset( self.kernel )
+    reset!( self.kernel )
     return self
 end
 
@@ -222,6 +261,27 @@ function taps2pfb{T}( h::Vector{T}, N𝜙::Integer )
 end
 
 
+
+
+#==============================================================================#
+#        ___  ____ _    _   _ _  _ ____ _  _ _ ____ _       ____ ___           #
+#        |__] |  | |     \_/  |\ | |  | |\/| | |__| |       |___ |__]          #
+#        |    |__| |___   |   | \| |__| |  | | |  | |___    |    |__]          #
+#==============================================================================#
+
+# Convert a polyphase filterbank into a polynomial filterbank
+
+function pfb2pnfb{T}( pfb::PFB{T}, polyorder )
+    (tapsPer𝜙, N𝜙) = size( pfb )
+    result         = Array( Poly{T}, tapsPer𝜙 )
+
+    for i in 1:tapsPer𝜙
+        row = vec( pfb[i,:] )
+        result[i] = polyfit( row, polyorder )
+    end
+
+    return result
+end
 
 
 #==============================================================================#
@@ -564,6 +624,25 @@ function update!( kernel::FIRArbitrary )
     end
 end
 
+
+# Generates a vector of filter taps for an arbitrary phase index.
+function tapsforphase!{T}( buffer::Vector{T}, kernel::FIRArbitrary{T}, phase::Real )
+    0 <= phase <= kernel.N𝜙 + 1         || error( "phase must be >= 0 and <= N𝜙+1" )
+    length( buffer ) >= kernel.tapsPer𝜙 || error( "buffer is too small" )
+
+    (α, 𝜙Idx) = modf( phase )
+    𝜙Idx      = int( 𝜙Idx )
+
+    for tapIdx in 1:kernel.tapsPer𝜙
+        buffer[tapIdx] = kernel.pfb[tapIdx,𝜙Idx] + α*kernel.dpfb[tapIdx,𝜙Idx]
+    end
+    buffer
+end
+
+tapsforphase{T}( kernel::FIRArbitrary{T}, phase::Real ) = tapsforphase!( Array(T,kernel.tapsPer𝜙), kernel, phase )
+
+
+# TODO: create in-place version which is called by a non-in-place method
 function filt{Th,Tx}( self::FIRFilter{FIRArbitrary{Th}}, x::Vector{Tx} )
     kernel              = self.kernel
     pfb                 = kernel.pfb
@@ -573,8 +652,9 @@ function filt{Th,Tx}( self::FIRFilter{FIRArbitrary{Th}}, x::Vector{Tx} )
     buffer              = Array(promote_type(Th,Tx), bufLen)
     bufIdx              = 1
     history::Vector{Tx} = self.history
-    db_vec_phi          = Array(Float64, bufLen)
-    db_vec_xidx         = Array(Int, bufLen)
+    # TODO: Remove when arb and farrow filters are rock-solid.    
+    # db_vec_phi          = Array(Float64, bufLen)
+    # db_vec_xidx         = Array(Int, bufLen)
 
     # Do we have enough input samples to produce one or more output samples?
     if xLen < kernel.inputDeficit
@@ -590,8 +670,9 @@ function filt{Th,Tx}( self::FIRFilter{FIRArbitrary{Th}}, x::Vector{Tx} )
     kernel.xIdx = kernel.inputDeficit
 
     while kernel.xIdx <= xLen
-        db_vec_xidx[bufIdx] = kernel.xIdx
-        db_vec_phi[bufIdx]  = kernel.𝜙Idx + kernel.α
+        # TODO: Remove when arb and farrow filters are rock-solid.        
+        # db_vec_xidx[bufIdx] = kernel.xIdx
+        # db_vec_phi[bufIdx]  = kernel.𝜙Idx + kernel.α
         if kernel.xIdx < kernel.tapsPer𝜙
             yLower = unsafedot( pfb,  kernel.𝜙Idx, history, x, kernel.xIdx )
             yUpper = unsafedot( dpfb, kernel.𝜙Idx, history, x, kernel.xIdx )
@@ -611,10 +692,11 @@ function filt{Th,Tx}( self::FIRFilter{FIRArbitrary{Th}}, x::Vector{Tx} )
 
     self.history = shiftin!( history, x )
 
-    resize!( db_vec_phi, length(buffer) )
-    resize!( db_vec_xidx, length(buffer) )    
-    return buffer, db_vec_xidx, db_vec_phi
-    # return buffer
+    # TODO: Remove when arb and farrow filters are rock-solid.
+    # resize!( db_vec_phi, length(buffer) )
+    # resize!( db_vec_xidx, length(buffer) )
+    # return buffer, db_vec_xidx, db_vec_phi
+    return buffer
 end
 
 
@@ -626,7 +708,87 @@ end
 #              |    |  | |  \ |  \ |__| |_|_|    |    | |___  |                #
 #==============================================================================#
 
-include( "FIRFarrow.jl" )
+# Generates a vector of filter taps for an arbitray (non-integer) phase index using polynomials
+function tapsforphase!{T}( buffer::Vector{T}, kernel::FIRFarrow{T}, phase::Real )
+    0 <= phase <= kernel.N𝜙 + 1         || error( "phase must be >= 0 and <= N𝜙+1" )
+    length( buffer ) >= kernel.tapsPer𝜙 || error( "buffer is too small" )
+
+    for tapIdx in 1:kernel.tapsPer𝜙
+        buffer[tapIdx] = polyval( kernel.pnfb[tapIdx], phase  )
+    end
+    
+    return buffer
+end
+
+tapsforphase{T}( kernel::FIRFarrow{T}, phase::Real ) = tapsforphase!( Array(T,kernel.tapsPer𝜙), kernel, phase )
+
+
+# Updates farrow filter state.
+# Generates new taps.
+function update!( kernel::FIRFarrow )
+    kernel.𝜙Idx += kernel.Δ
+
+    if kernel.𝜙Idx > kernel.N𝜙
+        kernel.xIdx += ifloor( (kernel.𝜙Idx-1) / kernel.N𝜙 )
+        kernel.𝜙Idx  = mod( (kernel.𝜙Idx-1), kernel.N𝜙 ) + 1
+    end
+
+    # tapsforphase!( kernel.currentTaps, kernel, kernel.𝜙Idx ) # TODO: why does this produce worse results than below?
+    for tapIdx in 1:kernel.tapsPer𝜙
+        @inbounds kernel.currentTaps[tapIdx] = polyval( kernel.pnfb[tapIdx], kernel.𝜙Idx )
+    end
+end
+
+
+# TODO: create in-place version which is called by a non-in-place method
+function filt{Th,Tx}( self::FIRFilter{FIRFarrow{Th}}, x::Vector{Tx} )
+    kernel              = self.kernel
+    xLen                = length( x )
+    bufLen              = iceil( xLen * kernel.rate ) + 1
+    buffer              = zeros(promote_type(Th,Tx), bufLen)
+    bufIdx              = 1
+    history::Vector{Tx} = self.history
+    # TODO: Remove when arb and farrow filters are rock-solid.    
+    # db_vec_phi          = Array(Float64, bufLen)
+    # db_vec_xidx         = Array(Int, bufLen)
+
+    # Do we have enough input samples to produce one or more output samples?
+    if xLen < kernel.inputDeficit
+        self.history = shiftin!( history, x )
+        kernel.inputDeficit -= xLen
+        return buffer[1:bufIdx-1]
+    end
+
+    # Skip over input samples that are not needed to produce output results.
+    kernel.xIdx = kernel.inputDeficit
+
+    while kernel.xIdx <= xLen
+        # TODO: Remove when arb and farrow filters are rock-solid.        
+        # db_vec_xidx[bufIdx] = kernel.xIdx
+        # db_vec_phi[bufIdx]  = kernel.𝜙Idx
+        if kernel.xIdx < kernel.tapsPer𝜙
+            y = unsafedot( kernel.currentTaps, history, x, kernel.xIdx )
+        else
+            y = unsafedot( kernel.currentTaps, x, kernel.xIdx )
+        end
+        buffer[bufIdx] = y
+        bufIdx        += 1
+        update!( kernel )
+    end
+
+    # Did we overestimate needed buffer size?
+    # TODO: Get rid of this by correctly calculating output size.
+    bufLen == bufIdx - 1 || resize!( buffer, bufIdx - 1)
+    kernel.inputDeficit = kernel.xIdx - xLen
+
+    self.history = shiftin!( history, x )
+
+    # TODO: Remove when arb and farrow filters are rock-solid.
+    # resize!( db_vec_phi, length(buffer) )
+    # resize!( db_vec_xidx, length(buffer) ) 
+    # return buffer, db_vec_xidx, db_vec_phi
+    return buffer
+end
 
 
 
@@ -637,13 +799,21 @@ include( "FIRFarrow.jl" )
 #       ___]  |  |  |  |  |___ |___ |___ ___] ___]    |    | |___  |           #
 #==============================================================================#
 
+# Single-rate, decimation, interpolation, and rational resampling.
 function filt( h::Vector, x::Vector, ratio::Rational = 1//1 )
     self = FIRFilter( h, ratio )
     filt( self, x )
 end
 
+# Arbitrary resampling with polyphase interpolation and two neighbor lnear interpolation.
 function filt( h::Vector, x::Vector, rate::FloatingPoint, N𝜙::Integer = 32 )
     self = FIRFilter( h, rate, N𝜙 )
+    filt( self, x )
+end
+
+# Arbitrary resampling with polyphase interpolation and polynomial generated intra-phase taps. 
+function filt( h::Vector, x::Vector, rate::FloatingPoint, N𝜙::Integer, polyorder::Integer )
+    self = FIRFilter( h, rate, N𝜙, polyorder )
     filt( self, x )
 end
 
@@ -651,9 +821,9 @@ end
 
 
 #==============================================================================#
-#                   ____ _ ___ ____ ___ _ ____ _  _ ____                       #
-#                   |    |  |  |__|  |  | |  | |\ | [__                        #
-#                   |___ |  |  |  |  |  | |__| | \| ___]                       #
+#               ____ ____ ____ ____ ____ ____ _  _ ____ ____ ____              #
+#               |__/ |___ |___ |___ |__/ |___ |\ | |    |___ [__               #
+#               |  \ |___ |    |___ |  \ |___ | \| |___ |___ ___]              #
 #==============================================================================#
 
 # [1] F.J. Harris, *Multirate Signal Processing for Communication Systems*. Prentice Hall, 2004

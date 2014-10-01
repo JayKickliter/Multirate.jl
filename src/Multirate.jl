@@ -1,8 +1,10 @@
 module Multirate
 
+
 include( "enum.jl" )
 
-import Base: filt, filt!, reset
+import Base: filt, filt!
+import Polynomials: Poly, polyval
 
 using DSP.Windows
 export  hanning,
@@ -22,13 +24,21 @@ export  firdes,
 
 include( "Filters.jl" )
 export  FIRFilter,
-        taps2pfb,
+        FIRInterpolator,
+        FIRArbitrary,
+        FIRDecimator,
+        FIRFarrow,
+        FIRRational,
+        FIRStandard,
         filt!,
         filt,
-        reset,
+        tapsforphase!,
+        tapsforphase,
+        taps2pfb,
+        reset!,
         outputlength,
         inputlength
-
+        
 include( "NaiveResamplers.jl" )
 
 end # module
