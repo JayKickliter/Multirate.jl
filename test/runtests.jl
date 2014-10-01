@@ -233,6 +233,7 @@ function test_interpolation( h, x, interpolation )
 
     display( [ baseResult statefulResult piecewiseResult ] )
 
+    return false
 end
 
 
