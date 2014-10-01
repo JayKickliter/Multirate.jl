@@ -245,8 +245,8 @@ end
 
 function taps2pfb{T}( h::Vector{T}, N𝜙::Integer )
     hLen      = length( h )
-    hLenPer𝜙  = iceil(  hLen/N𝜙  )
-    pfbSize   = hLenPer𝜙 * N𝜙
+    tapsPer𝜙  = iceil(  hLen/N𝜙  )
+    pfbSize   = tapsPer𝜙 * N𝜙
 
     if hLen != pfbSize                                # check that the vector is an integer multiple of N𝜙
         hExtended             = similar( h, pfbSize ) # No? extend and zero pad
@@ -256,8 +256,8 @@ function taps2pfb{T}( h::Vector{T}, N𝜙::Integer )
     end
 
     hLen      = length( h )
-    hLenPer𝜙  = int( hLen/N𝜙 )
-    pfb       = reshape( h, N𝜙, hLenPer𝜙 )'
+    tapsPer𝜙  = int( hLen/N𝜙 )
+    pfb       = reshape( h, N𝜙, tapsPer𝜙 )'
 end
 
 
