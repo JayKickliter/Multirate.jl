@@ -19,7 +19,7 @@ myfilter        = FIRFilter( h, resampleRate, N𝜙, polyorder )  # Construct a 
 y               = filt( myfilter, x )                          # Filter x
 ty              = [0:length(y)-1]./resampleRate - tapsPer𝜙/2   # Create y time vector. Accout for filter delay so the plots line up
 
-figure(num=nothing, figsize=(7, 7/golden), dpi=100, facecolor="w", edgecolor="k" )
+figure(num=nothing, figsize=(6, 6/golden), dpi=100, facecolor="w", edgecolor="k" )
 hold(true)
 plt.suptitle( "Farrow Filter Resampling, ratio = $(resampleRate)" )
 subplot( 211 )
@@ -39,4 +39,4 @@ ylabel( "Amplitude" )
 xticks([])
 yticks([])
 hold(false)
-savefig("Farrow.svg", dpi=100)
+savefig("Farrow.png", dpi=100)
