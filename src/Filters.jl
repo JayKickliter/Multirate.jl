@@ -625,8 +625,8 @@ end
 #==============================================================================#
 
 function setphase!( kernel::FIRArbitrary, 𝜙::Number )
-    (α, 𝜙Idx)   = modf( 𝜙/(2*pi)*kernel.N𝜙 )
-    kernel.𝜙Idx = 𝜙Idx
+    (α, 𝜙Idx)   = modf( (𝜙/(2*pi) * (kernel.N𝜙-1) ) )
+    kernel.𝜙Idx = int(𝜙Idx)+1
     kernel.α    = α
     return 𝜙Idx, α
 end
