@@ -2,34 +2,41 @@ using Multirate
 using DSP
 using PyPlot
 
-N𝜙              = 32
-tapsPer𝜙        = 10
-resampleRate    = 3.14
-xƒ1             = 0.15
-xƒ2             = 0.3
-Nx              = 40
-t               = 0:Nx-1
-x               = ( cos(2*pi*xƒ1*t) .+ 0.5sin(2*pi*xƒ2*t*pi) )  #.* hamming( Nx )
-tx              = [0:length(x)-1]
-cutoffFreq      = min( 0.45, resampleRate )
-transitionWidth = 0.05
-hLen            = tapsPer𝜙*N𝜙
-h               = firdes( hLen, cutoffFreq, DSP.kaiser, samplerate = N𝜙, beta = 5 ) .* N𝜙
-myfilter        = FIRFilter( h, resampleRate, N𝜙, 4 )
-y               = filt( myfilter, x )
-ty              = [0:length(y)-1]./resampleRate - tapsPer𝜙/2
+N𝜙              = 32                                           # Number of polyphase partitions
+tapsPer𝜙        = 10                                           # N𝜙 * tapsPer𝜙 will be the length of out prototype filter taps
+resampleRate    = float64(pi)                                  # Can be any arbitrary resampling rate
+polyorder       = 4                                            # Our taps will tranformed into
+Nx              = 40                                           # Number of signal samples
+t               = 0:Nx-1                                       # Time range
+xƒ1             = 0.15                                         # First singal frequency
+xƒ2             = 0.3                                          # Second signal frequency
+x               = cos(2*pi*xƒ1*t) .+ 0.5sin(2*pi*xƒ2*t*pi)     # Create the two signals and add them
+tx              = [0:length(x)-1]                              # Signal time vector
+cutoffFreq      = min( 0.45/N𝜙, resampleRate/N𝜙 )              # N𝜙 is also the integer interpolation, so set cutoff frequency accordingly
+hLen            = tapsPer𝜙*N𝜙                                  # Total number of filter taps
+h               = firdes( hLen, cutoffFreq, DSP.kaiser ) .* N𝜙 # Generate filter taps and scale by polyphase interpolation (N𝜙)
+myfilter        = FIRFilter( h, resampleRate, N𝜙, polyorder )  # Construct a FIRFilter{FIRFarrow} object
+y               = filt( myfilter, x )                          # Filter x
+ty              = [0:length(y)-1]./resampleRate - tapsPer𝜙/2   # Create y time vector. Accout for filter delay so the plots line up
 
-clf()
+figure(num=nothing, figsize=(7, 7/golden), dpi=100, facecolor="w", edgecolor="k" )
 hold(true)
-p1 = subplot( 211 )
-# title( "Original signal")
-plot( tx, x, "b-")
+plt.suptitle( "Farrow Filter Resampling, ratio = $(resampleRate)" )
+subplot( 211 )
+plot( tx, x, "b")
+stem( tx, x, linefmt = "b-", markerfmt = "b." )
 xlim( 0, maximum(ty) )
-stem( tx, x, "b-o" )
+xlabel( "Time" )
+ylabel( "Amplitude" )
+xticks([])
+yticks([])
 subplot( 212 )
-# title( "Resampled at $(resampleRate)x with a Farrow filter")
-stem( ty, y, "r-o" )
+stem( ty, y, linefmt = "r-", markerfmt = "r." )
 plot( ty, y, "r-" )
 xlim( 0, maximum(ty) )
+xlabel( "Time" )
+ylabel( "Amplitude" )
+xticks([])
+yticks([])
 hold(false)
-savefig("Farrow.png", dpi=100)
+savefig("Farrow.svg", dpi=100)
