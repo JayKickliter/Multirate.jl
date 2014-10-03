@@ -1,7 +1,7 @@
 [![Build Status](https://travis-ci.org/JayKickliter/Multirate.jl.svg?branch=master)](https://travis-ci.org/JayKickliter/Multirate.jl)
 [![CoverageStatus](https://coveralls.io/repos/JayKickliter/Multirate.jl/badge.png)](https://coveralls.io/r/JayKickliter/Multirate.jl)
 
-![Farrow example ](examples/Farrow.png)
+![Farrow example ](doc/Farrow.png)
 
 `Multirate` is a package for the creation and execution of streaming (stateful) FIR filters which can also perform sample rate conversion.
 
