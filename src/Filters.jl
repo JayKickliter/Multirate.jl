@@ -89,7 +89,7 @@ end
 # a derivitive filter, we can always compute the output in that scenario.
 # See section 7.6.1 in [1] for a better explanation.
 
-type FIRArbitrary{T} <: FIRKernel
+type FIRArbitrary{T} <: FIRKernel # TODO: since farrow is also arbitrary, find a new name
     rate::Float64
     pfb::PFB{T}
     dpfb::PFB{T}
@@ -342,7 +342,7 @@ function outputlength( self::FIRFilter{FIRRational}, inputlength::Integer )
 end
 
 # TODO: outputlength function for arbitrary FIR kernel
-
+# TODO: outputlength function for farrow FIR kernel
 
 
 
