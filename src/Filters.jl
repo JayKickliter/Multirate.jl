@@ -9,7 +9,7 @@ typealias PNFB{T} Vector{Poly{T}}   # polynomial filter bank (used for farrow fi
 
 abstract Filter
 abstract FIRKernel
-
+# TODO: all kernels: add field original taps
 # Single rate FIR kernel
 type FIRStandard <: FIRKernel
     h::Vector
@@ -123,7 +123,7 @@ end
 type FIRFarrow{T} <: FIRKernel
     rate::Float64
     pfb::PFB{T}
-    pnfb::PNFB{T}
+    pnfb::PNFB{T} # TODO: add field poly order
     currentTaps::Vector{T}
     N𝜙::Int
     tapsPer𝜙::Int
