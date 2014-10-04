@@ -16,8 +16,8 @@ function time_firfarrow{Th,Tx}( self::FIRFilter{FIRFarrow{Th}}, x::Vector{Tx} )
     @printf( "\ttaps per 𝜙       %d\n", kernel.tapsPer𝜙 )
     ( y, elapsed, allocated, z ) = @timed filt( self, x )
     @printf( "\telapsed time (s) %1.3f\n", elapsed )
-    @printf( "\tinput samples/s  %1.2e\n", xLen/elapsed )
-    @printf( "\toutput samples/s %1.2e\n", length(y)/elapsed )
+    @printf( "\tinput samples/s  %1.3e\n", xLen/elapsed )
+    @printf( "\toutput samples/s %1.3e\n", length(y)/elapsed )
 end
 
 
@@ -32,8 +32,8 @@ function time_firarbitrary{Th,Tx}( self::FIRFilter{FIRArbitrary{Th}}, x::Vector{
     @printf( "\ttaps per 𝜙       %d\n", tapsPer𝜙 )
     ( y, elapsed, allocated, z ) = @timed filt( self, x )    
     @printf( "\telapsed time (s) %1.3f\n", elapsed )
-    @printf( "\tinput samples/s  %1.2e\n", xLen/elapsed )
-    @printf( "\toutput samples/s %1.2e\n", length(y)/elapsed )
+    @printf( "\tinput samples/s  %1.3e\n", xLen/elapsed )
+    @printf( "\toutput samples/s %1.3e\n", length(y)/elapsed )
 end
 
 N𝜙           = 32                                               # Number of polyphase partitions
@@ -44,17 +44,18 @@ Th           = Float32
 cutoffFreq   = min( 0.45/N𝜙, resampleRate/N𝜙 )                  # N𝜙 is also the integer interpolation, so set cutoff frequency accordingly
 hLen         = tapsPer𝜙*N𝜙                                      # Total number of filter taps
 h            = firdes( hLen, cutoffFreq, DSP.kaiser ) .* N𝜙     # Generate filter taps and scale by polyphase interpolation (N𝜙)
-farrowfilt   = FIRFilter( h, resampleRate, N𝜙, polyorder )      # Construct a FIRFilter{FIRFarrow} object
-arbfilt      = FIRFilter( h, resampleRate, N𝜙 )
 xLen         = 10_000_000                                       # Number of signal samples
-
-
-Tx           = Float32
+Tx           = Complex64
 x            = rand( Tx, xLen )
+
+
+farrowfilt = FIRFilter( h, resampleRate, N𝜙, polyorder )      # Construct a FIRFilter{FIRFarrow} object
+arbfilt    = FIRFilter( h, resampleRate, N𝜙 )
 time_firfarrow( farrowfilt, x )
 time_firarbitrary( arbfilt, x )
 
-Tx           = Complex64
-x            = rand( Tx, xLen )
+resampleRate = 1/2.123456789
+farrowfilt = FIRFilter( h, resampleRate, N𝜙, polyorder )      # Construct a FIRFilter{FIRFarrow} object
+arbfilt    = FIRFilter( h, resampleRate, N𝜙 )
 time_firfarrow( farrowfilt, x )
 time_firarbitrary( arbfilt, x )
