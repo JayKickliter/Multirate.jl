@@ -200,6 +200,38 @@ end
 
 
 #==============================================================================#
+#                    ____ ____ ___ ___  _  _ ____ ____ ____                    #
+#                    [__  |___  |  |__] |__| |__| [__  |___                    #
+#                    ___] |___  |  |    |  | |  | ___] |___                    #
+#==============================================================================#
+# Sets the kernel's phase (𝜙Idx+α).
+#   Valid input is [0, 1]
+
+function setphase( kernel::union(FIRInterpolator, FIRRational), 𝜙::Number )
+    @assert zero(𝜙) <= 𝜙 <= one(𝜙)
+    kernel.𝜙Idx = int(𝜙Idx)
+    return kernel.𝜙Idx
+end
+
+function setphase( kernel::FIRArbitrary, 𝜙::Number )
+    @assert zero(𝜙) <= 𝜙 <= one(𝜙)
+    (α, 𝜙Idx)   = modf( 𝜙 * kernel.N𝜙 )
+    kernel.𝜙Idx = int(𝜙Idx)
+    kernel.α    = α
+    return 𝜙Idx, α
+end
+
+function setphase( kernel::FIRFarrow, 𝜙::Number )
+    @assert zero(𝜙) <= 𝜙 <= one(𝜙)
+    kernel.𝜙Idx = modf( 𝜙 * kernel.N𝜙 )
+    return kernel.𝜙Idx
+end
+
+
+setphase( self::FIRFilter, 𝜙::Number ) = setphase( self.kernel, 𝜙 )
+
+
+#==============================================================================#
 #                            ____ ____ ____ ____ ___                           #
 #                            |__/ |___ [__  |___  |                            #
 #                            |  \ |___ ___] |___  |                            #
@@ -632,18 +664,6 @@ end
 #        |  | |  \ |__] .   |  \ |___ ___] |  | |  | |    |___ |___ |  \       #
 #==============================================================================#
 
-# Sets the kernel's phase (𝜙Idx+α).
-#   Valid input is [0, 1)
-function setphase( kernel::FIRArbitrary, 𝜙::Number )
-    @assert 0 <= 𝜙 < 1
-    (α, 𝜙Idx)   = modf( 𝜙 * (kernel.N𝜙-1) )
-    kernel.𝜙Idx = int(𝜙Idx)+1
-    kernel.α    = α
-    return 𝜙Idx, α
-end
-
-setphase{T}( self::FIRFilter{FIRArbitrary{T}}, 𝜙::Number ) = setphase( self.kernel, 𝜙 )
-
 # Updates FIRArbitrary state. See Section 7.5.1 in [1].
 #   [1] uses a phase accumilator that increments by Δ (N𝜙/rate)
 #   The original implementation of update used this method, but the numerical
@@ -750,17 +770,6 @@ end
 #              |___ |__| |__/ |__/ |  | | | |    |___ | |     |                #
 #              |    |  | |  \ |  \ |__| |_|_|    |    | |___  |                #
 #==============================================================================#
-
-# Sets the kernel's phase (𝜙Idx+α).
-#   Valid input is [0, 1)
-function setphase( kernel::FIRFarrow, 𝜙::Number )
-    @assert 0 <= 𝜙 < 1
-    kernel.𝜙Idx = modf( 𝜙 * (kernel.N𝜙-1) )
-
-    return kernel.𝜙Idx
-end
-
-setphase( self::FIRFilter{FIRFarrow}, 𝜙::Number ) = setphase( self.kernel, 𝜙 )
 
 # Generates a vector of filter taps for an arbitray (non-integer) phase index using polynomials
 function tapsforphase!{T}( buffer::Vector{T}, kernel::FIRFarrow{T}, phase::Real )
