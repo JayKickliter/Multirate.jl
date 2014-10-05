@@ -32,11 +32,11 @@ export  FIRFilter,
         FIRStandard,
         filt!,
         filt,
-        setphase!,
+        setphase,
         tapsforphase!,
         tapsforphase,
         taps2pfb,
-        reset!,
+        reset,
         outputlength,
         inputlength
         

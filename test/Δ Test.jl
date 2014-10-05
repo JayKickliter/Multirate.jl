@@ -20,12 +20,12 @@ type ArbResamplerState
         δ            = 0
         yLower       = 0
         self = new( rate, N𝜙, Δ, counter, 𝜙Accumulator, 𝜙Idx, δ, 𝜙IdxVirtual, yLower )
-        # update!( self )
+        # update( self )
         self
     end
 end
 
-function update!( self::ArbResamplerState )
+function update( self::ArbResamplerState )
     self.counter += self.Δ
     self.𝜙Accumulator += self.Δ
     if self.𝜙Accumulator >= 1
@@ -49,7 +49,7 @@ self   = ArbResamplerState( resamp, N𝜙 )
 while xCount < 11
     xCount += 1
     @printf( "%d:\tcounter = %f, 𝜙Accumulator = %f, 𝜙IdxVirtual = %f, 𝜙Idx = %d, δ = %f\n", xCount, self.counter, self.𝜙Accumulator, self.𝜙IdxVirtual, self.𝜙Idx, self.δ)
-    update!( self )
+    update( self )
 end
 #
 # resamp       = 0.9

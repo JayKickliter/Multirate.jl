@@ -123,7 +123,8 @@ end
 type FIRFarrow{T} <: FIRKernel
     rate::Float64
     pfb::PFB{T}
-    pnfb::PNFB{T} # TODO: add field poly order
+    pnfb::PNFB{T}
+    polyorder::Int
     currentTaps::Vector{T}
     N𝜙::Int
     tapsPer𝜙::Int
@@ -142,7 +143,7 @@ function FIRFarrow{T}( h::Vector{T}, rate::Real, N𝜙::Integer, polyorder::Inte
     inputDeficit = 1
     xIdx         = 1
     currentTaps  = T[ polyval( pnfb[tapIdx], 𝜙Idx ) for tapIdx in 1:tapsPer𝜙 ]
-    FIRFarrow( rate, pfb, pnfb, currentTaps, N𝜙, tapsPer𝜙, 𝜙Idx, Δ, inputDeficit, xIdx )
+    FIRFarrow( rate, pfb, pnfb, polyorder, currentTaps, N𝜙, tapsPer𝜙, 𝜙Idx, Δ, inputDeficit, xIdx )
 end
 
 
@@ -207,21 +208,21 @@ end
 # Resets filter and its kernel to an initial state
 
 # Does nothing for non-rational kernels
-reset!( self::FIRKernel ) = self
+reset( self::FIRKernel ) = self
 
 # For rational kernel, set 𝜙Idx back to 1
-reset!( self::FIRRational ) = self.𝜙Idx = 1
+reset( self::FIRRational ) = self.𝜙Idx = 1
 
 # For rational kernel, set 𝜙Idx back to 1
-function reset!( self::FIRArbitrary )
+function reset( self::FIRArbitrary )
     self.yCount = 0
-    update!( self )
+    update( self )
 end
 
 # For FIRFilter, set history vector to zeros of same type and required length
-function reset!( self::FIRFilter )
+function reset( self::FIRFilter )
     self.history = zeros( eltype( self.history ), self.historyLen )
-    reset!( self.kernel )
+    reset( self.kernel )
     return self
 end
 
@@ -322,27 +323,34 @@ function outputlength( inputlength::Integer, ratio::Rational, initial𝜙::Integ
     iceil(  outLen  )
 end
 
-function outputlength( self::FIRFilter{FIRStandard}, inputlength::Integer )
+function outputlength( kernel::FIRStandard, inputlength::Integer )
     inputlength
 end
 
-function outputlength( self::FIRFilter{FIRInterpolator}, inputlength::Integer )
-    kernel = self.kernel
+function outputlength( kernel::FIRInterpolator, inputlength::Integer )
     kernel.interpolation * inputlength
 end
 
-function outputlength( self::FIRFilter{FIRDecimator}, inputlength::Integer )
-    kernel = self.kernel
+function outputlength( kernel::FIRDecimator, inputlength::Integer )
     outputlength( inputlength-kernel.inputDeficit+1, 1//kernel.decimation, 1 )
 end
 
-function outputlength( self::FIRFilter{FIRRational}, inputlength::Integer )
-    kernel = self.kernel
+function outputlength( kernel::FIRRational, inputlength::Integer )
     outputlength( inputlength-kernel.inputDeficit+1, kernel.ratio, kernel.𝜙Idx )
 end
 
-# TODO: outputlength function for arbitrary FIR kernel
-# TODO: outputlength function for farrow FIR kernel
+function outputlength( kernel::FIRArbitrary, inputlength::Integer )
+    iceil( (inputlength-kernel.inputDeficit+1) * kernel.rate )
+end
+
+function outputlength( kernel::FIRFarrow, inputlength::Integer )
+    iceil( (inputlength-kernel.inputDeficit+1) * kernel.rate )
+end
+
+function outputlength( self::FIRFilter, inputlength::Integer )
+    outputlength( self.kernel, inputlength )
+end
+
 
 
 
@@ -407,7 +415,7 @@ end
 #==============================================================================#
 
 function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRStandard}, x::Vector{T} )
-    history::Vector{T} = self.history # TODO: figure out a better way of handling this
+    history::Vector{T} = self.history
     h::Vector{T}       = self.kernel.h
     hLen               = self.kernel.hLen
     historyLen         = self.historyLen
@@ -624,25 +632,28 @@ end
 #        |  | |  \ |__] .   |  \ |___ ___] |  | |  | |    |___ |___ |  \       #
 #==============================================================================#
 
-function setphase!( kernel::FIRArbitrary, 𝜙::Number )
-    (α, 𝜙Idx)   = modf( (𝜙/(2*pi) * (kernel.N𝜙-1) ) )
+# Sets the kernel's phase (𝜙Idx+α).
+#   Valid input is [0, 1)
+function setphase( kernel::FIRArbitrary, 𝜙::Number )
+    @assert 0 <= 𝜙 < 1
+    (α, 𝜙Idx)   = modf( 𝜙 * (kernel.N𝜙-1) )
     kernel.𝜙Idx = int(𝜙Idx)+1
     kernel.α    = α
     return 𝜙Idx, α
 end
 
-setphase!{T}( self::FIRFilter{FIRArbitrary{T}}, 𝜙::Number ) = setphase!( self.kernel, 𝜙 )
+setphase{T}( self::FIRFilter{FIRArbitrary{T}}, 𝜙::Number ) = setphase( self.kernel, 𝜙 )
 
 # Updates FIRArbitrary state. See Section 7.5.1 in [1].
 #   [1] uses a phase accumilator that increments by Δ (N𝜙/rate)
-#   The original implementation of update! used this method, but the numerical
+#   The original implementation of update used this method, but the numerical
 #   errors built up pretty quickly. Instead α is now incremented by δ, the
 #   fractional part of Δ. The phase index, 𝜙Idx, is now incremented by
 #   integer part of Δ plus the integer part of α. However, α should always
 #   be < 1. So α is first incremented by δ and may be greater than 1 at this
 #   point. We dont want to fix that until we add the integer part to 𝜙Idx first.
 #   I hope that makes sense.
-function update!( kernel::FIRArbitrary )
+function update( kernel::FIRArbitrary )
     kernel.α    += kernel.δ
     kernel.𝜙Idx += ifloor( kernel.α ) + kernel.𝜙Stride
     kernel.α     = mod( kernel.α, 1.0 )
@@ -671,15 +682,12 @@ end
 tapsforphase{T}( kernel::FIRArbitrary{T}, phase::Real ) = tapsforphase!( Array(T,kernel.tapsPer𝜙), kernel, phase )
 
 
-# TODO: create in-place version which is called by a non-in-place method
-function filt{Th,Tx}( self::FIRFilter{FIRArbitrary{Th}}, x::Vector{Tx} )
+function filt!{Tb,Th,Tx}( buffer::Vector{Tb}, self::FIRFilter{FIRArbitrary{Th}}, x::Vector{Tx} )
     kernel              = self.kernel
     pfb                 = kernel.pfb
     dpfb                = kernel.dpfb
     xLen                = length( x )
-    bufLen              = iceil( xLen * kernel.rate ) + 1
-    buffer              = Array(promote_type(Th,Tx), bufLen)
-    bufIdx              = 1
+    bufIdx              = 0
     history::Vector{Tx} = self.history
     # TODO: Remove when arb and farrow filters are rock-solid.
     # db_vec_phi          = Array(Float64, bufLen)
@@ -689,7 +697,7 @@ function filt{Th,Tx}( self::FIRFilter{FIRArbitrary{Th}}, x::Vector{Tx} )
     if xLen < kernel.inputDeficit
         self.history = shiftin!( history, x )
         kernel.inputDeficit -= xLen
-        return buffer[1:bufIdx-1]
+        return bufIdx
     end
 
     # Skip over input samples that are not needed to produce output results.
@@ -702,6 +710,7 @@ function filt{Th,Tx}( self::FIRFilter{FIRArbitrary{Th}}, x::Vector{Tx} )
         # TODO: Remove when arb and farrow filters are rock-solid.
         # db_vec_xidx[bufIdx] = kernel.xIdx
         # db_vec_phi[bufIdx]  = kernel.𝜙Idx + kernel.α
+        bufIdx += 1
         if kernel.xIdx < kernel.tapsPer𝜙
             yLower = unsafedot( pfb,  kernel.𝜙Idx, history, x, kernel.xIdx )
             yUpper = unsafedot( dpfb, kernel.𝜙Idx, history, x, kernel.xIdx )
@@ -710,21 +719,26 @@ function filt{Th,Tx}( self::FIRFilter{FIRArbitrary{Th}}, x::Vector{Tx} )
             yUpper = unsafedot( dpfb, kernel.𝜙Idx, x, kernel.xIdx )
         end
         buffer[bufIdx] = yLower + yUpper * kernel.α
-        bufIdx        += 1
-        update!( kernel )
+        update( kernel )
     end
 
-    # Did we overestimate needed buffer size?
-    # TODO: Get rid of this by correctly calculating output size.
-    bufLen == bufIdx - 1 || resize!( buffer, bufIdx - 1)
     kernel.inputDeficit = kernel.xIdx - xLen
-
-    self.history = shiftin!( history, x )
+    self.history        = shiftin!( history, x )
 
     # TODO: Remove when arb and farrow filters are rock-solid.
     # resize!( db_vec_phi, length(buffer) )
     # resize!( db_vec_xidx, length(buffer) )
     # return buffer, db_vec_xidx, db_vec_phi
+    return bufIdx
+end
+
+function filt{Th,Tx}( self::FIRFilter{FIRArbitrary{Th}}, x::Vector{Tx} )
+    bufLen         = outputlength( self, length(x) )
+    buffer         = Array( promote_type(Th,Tx), bufLen )
+    samplesWritten = filt!( buffer, self, x )
+
+    samplesWritten == bufLen || resize!( buffer, samplesWritten)
+
     return buffer
 end
 
@@ -736,6 +750,17 @@ end
 #              |___ |__| |__/ |__/ |  | | | |    |___ | |     |                #
 #              |    |  | |  \ |  \ |__| |_|_|    |    | |___  |                #
 #==============================================================================#
+
+# Sets the kernel's phase (𝜙Idx+α).
+#   Valid input is [0, 1)
+function setphase( kernel::FIRFarrow, 𝜙::Number )
+    @assert 0 <= 𝜙 < 1
+    kernel.𝜙Idx = modf( 𝜙 * (kernel.N𝜙-1) )
+
+    return kernel.𝜙Idx
+end
+
+setphase( self::FIRFilter{FIRFarrow}, 𝜙::Number ) = setphase( self.kernel, 𝜙 )
 
 # Generates a vector of filter taps for an arbitray (non-integer) phase index using polynomials
 function tapsforphase!{T}( buffer::Vector{T}, kernel::FIRFarrow{T}, phase::Real )
@@ -754,7 +779,7 @@ tapsforphase{T}( kernel::FIRFarrow{T}, phase::Real ) = tapsforphase!( Array(T,ke
 
 # Updates farrow filter state.
 # Generates new taps.
-function update!( kernel::FIRFarrow )
+function update( kernel::FIRFarrow )
     kernel.𝜙Idx += kernel.Δ
 
     if kernel.𝜙Idx > kernel.N𝜙
@@ -769,13 +794,10 @@ function update!( kernel::FIRFarrow )
 end
 
 
-# TODO: create in-place version which is called by a non-in-place method
-function filt{Th,Tx}( self::FIRFilter{FIRFarrow{Th}}, x::Vector{Tx} )
+function filt!{Tb,Th,Tx}( buffer::Vector{Tb}, self::FIRFilter{FIRFarrow{Th}}, x::Vector{Tx} )
     kernel              = self.kernel
     xLen                = length( x )
-    bufLen              = iceil( xLen * kernel.rate ) + 1
-    buffer              = zeros(promote_type(Th,Tx), bufLen)
-    bufIdx              = 1
+    bufIdx              = 0
     history::Vector{Tx} = self.history
     # TODO: Remove when arb and farrow filters are rock-solid.
     # db_vec_phi          = Array(Float64, bufLen)
@@ -785,13 +807,14 @@ function filt{Th,Tx}( self::FIRFilter{FIRFarrow{Th}}, x::Vector{Tx} )
     if xLen < kernel.inputDeficit
         self.history = shiftin!( history, x )
         kernel.inputDeficit -= xLen
-        return buffer[1:bufIdx-1]
+        return bufIdx
     end
 
     # Skip over input samples that are not needed to produce output results.
     kernel.xIdx = kernel.inputDeficit
 
     while kernel.xIdx <= xLen
+        bufIdx        += 1
         # TODO: Remove when arb and farrow filters are rock-solid.
         # db_vec_xidx[bufIdx] = kernel.xIdx
         # db_vec_phi[bufIdx]  = kernel.𝜙Idx
@@ -801,21 +824,26 @@ function filt{Th,Tx}( self::FIRFilter{FIRFarrow{Th}}, x::Vector{Tx} )
             y = unsafedot( kernel.currentTaps, x, kernel.xIdx )
         end
         buffer[bufIdx] = y
-        bufIdx        += 1
-        update!( kernel )
+        update( kernel )
     end
 
-    # Did we overestimate needed buffer size?
-    # TODO: Get rid of this by correctly calculating output size.
-    bufLen == bufIdx - 1 || resize!( buffer, bufIdx - 1)
     kernel.inputDeficit = kernel.xIdx - xLen
-
-    self.history = shiftin!( history, x )
+    self.history        = shiftin!( history, x )
 
     # TODO: Remove when arb and farrow filters are rock-solid.
     # resize!( db_vec_phi, length(buffer) )
     # resize!( db_vec_xidx, length(buffer) )
     # return buffer, db_vec_xidx, db_vec_phi
+    return bufIdx
+end
+
+function filt{Th,Tx}( self::FIRFilter{FIRFarrow{Th}}, x::Vector{Tx} )
+    bufLen         = outputlength( self, length(x) )
+    buffer         = Array( promote_type(Th,Tx), bufLen )
+    samplesWritten = filt!( buffer, self, x )
+
+    samplesWritten == bufLen || resize!( buffer, samplesWritten)
+
     return buffer
 end
 
@@ -858,3 +886,4 @@ end
 # [1] F.J. Harris, *Multirate Signal Processing for Communication Systems*. Prentice Hall, 2004
 # [2] Dick, C.; Harris, F., "Options for arbitrary resamplers in FPGA-based modulators," Signals, Systems and Computers, 2004. Conference Record of the Thirty-Eighth Asilomar Conference on , vol.1, no., pp.777,781 Vol.1, 7-10 Nov. 2004
 # [3] Kim, S.C.; Plishker, W.L.; Bhattacharyya, S.S., "An efficient GPU implementation of an arbitrary resampling polyphase channelizer," Design and Architectures for Signal and Image Processing (DASIP), 2013 Conference on, vol., no., pp.231,238, 8-10 Oct. 2013
+# [4] Horridge, J.P.; Frazer, Gordon J., "Accurate arbitrary resampling with exact delay for radar applications," Radar, 2008 International Conference on , vol., no., pp.123,127, 2-5 Sept. 2008
