@@ -207,7 +207,7 @@ end
 # Sets the kernel's phase (𝜙Idx+α).
 #   Valid input is [0, 1]
 
-function setphase( kernel::union(FIRInterpolator, FIRRational), 𝜙::Number )
+function setphase( kernel::Union(FIRInterpolator, FIRRational), 𝜙::Number )
     @assert zero(𝜙) <= 𝜙 <= one(𝜙)
     kernel.𝜙Idx = int(𝜙Idx)
     return kernel.𝜙Idx
