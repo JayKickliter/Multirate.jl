@@ -223,7 +223,7 @@ end
 
 function setphase( kernel::FIRFarrow, 𝜙::Number )
     @assert zero(𝜙) <= 𝜙 <= one(𝜙)
-    kernel.𝜙Idx = modf( 𝜙 * kernel.N𝜙 )
+    kernel.𝜙Idx = 𝜙
     return kernel.𝜙Idx
 end
 
