@@ -1,13 +1,12 @@
 using Multirate
 using DSP
-using PyPlot
 
 function time_firfarrow{Th,Tx}( self::FIRFilter{FIRFarrow{Th}}, x::Vector{Tx} )
     kernel = self.kernel
     xLen   = length( x )
     println( "\nFIRFarrow speed test" )
     @printf( "\tresampling rate  %f\n", resampleRate )
-    # @printf( "\tpolynomial order %d\n", polyorder )
+                                                             # @printf( "\tpolynomial order %d\n", polyorder )
     @printf( "\tx type           %s\n", string(Tx) )
     @printf( "\tx length         %d\n", xLen )
     @printf( "\th type           %s\n", string(Th) )
@@ -36,26 +35,20 @@ function time_firarbitrary{Th,Tx}( self::FIRFilter{FIRArbitrary{Th}}, x::Vector{
     @printf( "\toutput samples/s %1.3e\n", length(y)/elapsed )
 end
 
-N𝜙           = 32                                               # Number of polyphase partitions
-tapsPer𝜙     = 10                                               # N𝜙 * tapsPer𝜙 will be the length of out protoyTimepe filter taps
-resampleRate = 1.0                                              # Can be any arbitrary resampling rate
-polyorder    = 4                                                # Our taps will tranformed into
+N𝜙           = 32                                            # Number of polyphase partitions
+tapsPer𝜙     = 10                                            # N𝜙 * tapsPer𝜙 will be the length of out protoyTimepe filter taps
+resampleRate = 1.0                                           # Can be any arbitrary resampling rate
+polyorder    = 4                                             # Our taps will tranformed into
 Th           = Float32
-cutoffFreq   = min( 0.45/N𝜙, resampleRate/N𝜙 )                  # N𝜙 is also the integer interpolation, so set cutoff frequency accordingly
-hLen         = tapsPer𝜙*N𝜙                                      # Total number of filter taps
-h            = firdes( hLen, cutoffFreq, DSP.kaiser ) .* N𝜙     # Generate filter taps and scale by polyphase interpolation (N𝜙)
-xLen         = 10_000_000                                       # Number of signal samples
-Tx           = Complex64
-x            = rand( Tx, xLen )
+cutoffFreq   = min( 0.45/N𝜙, resampleRate/N𝜙 )               # N𝜙 is also the integer interpolation, so set cutoff frequency accordingly
+hLen         = tapsPer𝜙*N𝜙                                   # Total number of filter taps
+h            = firdes( hLen, cutoffFreq, DSP.kaiser ) .* N𝜙  # Generate filter taps and scale by polyphase interpolation (N𝜙)
+xLen         = 10_000_000                                    # Number of signal samples
 
-
-farrowfilt = FIRFilter( h, resampleRate, N𝜙, polyorder )      # Construct a FIRFilter{FIRFarrow} object
-arbfilt    = FIRFilter( h, resampleRate, N𝜙 )
-time_firfarrow( farrowfilt, x )
-time_firarbitrary( arbfilt, x )
-
-resampleRate = 1/2.123456789
-farrowfilt = FIRFilter( h, resampleRate, N𝜙, polyorder )      # Construct a FIRFilter{FIRFarrow} object
-arbfilt    = FIRFilter( h, resampleRate, N𝜙 )
-time_firfarrow( farrowfilt, x )
-time_firarbitrary( arbfilt, x )
+for resampleRate in ( 1.0, 1/2.123456789 ), Tx in ( Float32, Float64, Complex64, Complex128 )
+    farrowfilt = FIRFilter( h, resampleRate, N𝜙, polyorder ) # Construct a FIRFilter{FIRFarrow} object
+    arbfilt    = FIRFilter( h, resampleRate, N𝜙 )
+    x          = rand( Tx, xLen )
+    time_firfarrow( farrowfilt, x )
+    time_firarbitrary( arbfilt, x )
+end
