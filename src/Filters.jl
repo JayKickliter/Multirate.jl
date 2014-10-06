@@ -670,7 +670,6 @@ function update( kernel::FIRArbitrary )
 
     kernel.𝜙Idx = ifloor( kernel.𝜙Accumulator )
     kernel.α    = kernel.𝜙Accumulator - kernel.𝜙Idx
-    println( "𝜙Idx = $(kernel.𝜙Idx), α = $(kernel.α)" )
 end
 
 
