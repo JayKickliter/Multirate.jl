@@ -26,6 +26,7 @@ include( "Filters.jl" )
 export  FIRFilter,
         FIRInterpolator,
         FIRArbitrary,
+        Channelizer,
         FIRDecimator,
         FIRFarrow,
         FIRRational,
