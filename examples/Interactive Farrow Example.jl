@@ -27,13 +27,16 @@ h          = firdes( hLen, cutoffFreq, DSP.kaiser ) .* N𝜙 # Generate filter t
                         out = :plot
 
     myfilter            = FIRFilter( h, ratio, N𝜙, polyorder )  # Construct a FIRFilter{FIRFarrow} object
-    kernel              = myfilter.kernel                        
+    kernel              = myfilter.kernel
     (phase,throwaway)   = modf(δfilter+δout)
     setphase( myfilter, phase )
     kernel.inputDeficit = throwaway+1
     y                   = filt( myfilter, x )
     yTime               = (0.0:length(y)-1)/ratio+δout
-    p                   = plot( xTime, x, "b-*", yTime, y, "r-*" )
+    plottable           = Table( 3, 1 )
+    plottable[1,1]      = plot( xTime, x, "b-*" )
+    plottable[2,1]      = plot( yTime, y, "r-*" )
+    plottable[3,1]      = plot( xTime, x, "b-*", yTime, y, "r-*" )
 
-    push!(out, p)
+    push!(out, plottable)
 end
