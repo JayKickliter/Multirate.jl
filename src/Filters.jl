@@ -223,7 +223,8 @@ end
 
 function setphase( kernel::FIRFarrow, 𝜙::Number )
     @assert zero(𝜙) <= 𝜙 <= one(𝜙)
-    kernel.𝜙Idx = 𝜙
+    kernel.𝜙Idx = 𝜙*(kernel.N𝜙-1)+1
+    tapsforphase!( kernel.currentTaps, kernel, kernel.𝜙Idx  )
     return kernel.𝜙Idx
 end
 
