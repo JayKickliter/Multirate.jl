@@ -88,17 +88,16 @@ end
 # when where's at the last polphase branch and the last available input sample. By using
 # a derivitive filter, we can always compute the output in that scenario.
 # See section 7.6.1 in [1] for a better explanation.
-
 type FIRArbitrary{T} <: FIRKernel # TODO: since farrow is also arbitrary, find a new name
     rate::Float64
     pfb::PFB{T}
     dpfb::PFB{T}
     N𝜙::Int
-    𝜙Stride::Int
     tapsPer𝜙::Int
+    𝜙Accumulator::Float64
     𝜙Idx::Int
     α::Float64
-    δ::Float64
+    Δ::Float64
     inputDeficit::Int
     xIdx::Int
 end
@@ -108,12 +107,13 @@ function FIRArbitrary( h::Vector, rate::Real, N𝜙::Integer )
     pfb          = taps2pfb( h,  N𝜙 )
     dpfb         = taps2pfb( dh, N𝜙 )
     tapsPer𝜙     = size( pfb )[1]
+    𝜙Accumulator = 1.0
     𝜙Idx         = 1
     α            = 0.0
-    (δ, 𝜙Stride) = modf( N𝜙/rate )
+    Δ            = N𝜙/rate
     inputDeficit = 1
     xIdx         = 1
-    FIRArbitrary( rate, pfb, dpfb, N𝜙, int( 𝜙Stride ), tapsPer𝜙, 𝜙Idx, α, δ, inputDeficit, xIdx )
+    FIRArbitrary( rate, pfb, dpfb, N𝜙, tapsPer𝜙, 𝜙Accumulator, 𝜙Idx, α, Δ, inputDeficit, xIdx )
 end
 
 
@@ -660,22 +660,17 @@ end
 
 # Updates FIRArbitrary state. See Section 7.5.1 in [1].
 #   [1] uses a phase accumilator that increments by Δ (N𝜙/rate)
-#   The original implementation of update used this method, but the numerical
-#   errors built up pretty quickly. Instead α is now incremented by δ, the
-#   fractional part of Δ. The phase index, 𝜙Idx, is now incremented by
-#   integer part of Δ plus the integer part of α. However, α should always
-#   be < 1. So α is first incremented by δ and may be greater than 1 at this
-#   point. We dont want to fix that until we add the integer part to 𝜙Idx first.
-#   I hope that makes sense.
 function update( kernel::FIRArbitrary )
-    kernel.α    += kernel.δ
-    kernel.𝜙Idx += ifloor( kernel.α ) + kernel.𝜙Stride
-    kernel.α     = mod( kernel.α, 1.0 )
+    kernel.𝜙Accumulator += kernel.Δ
 
-    if kernel.𝜙Idx > kernel.N𝜙
-        kernel.xIdx += ifloor( (kernel.𝜙Idx-1) / kernel.N𝜙 )
-        kernel.𝜙Idx  = mod( (kernel.𝜙Idx-1), kernel.N𝜙 ) + 1
+    if kernel.𝜙Accumulator > kernel.N𝜙
+        kernel.xIdx        += ifloor( (kernel.𝜙Accumulator-1) / kernel.N𝜙 )
+        kernel.𝜙Accumulator = mod( (kernel.𝜙Accumulator-1), kernel.N𝜙 ) + 1
     end
+
+    kernel.𝜙Idx = ifloor( kernel.𝜙Accumulator )
+    kernel.α    = kernel.𝜙Accumulator - kernel.𝜙Idx
+    println( "𝜙Idx = $(kernel.𝜙Idx), α = $(kernel.α)" )
 end
 
 
@@ -725,6 +720,7 @@ function filt!{Tb,Th,Tx}( buffer::Vector{Tb}, self::FIRFilter{FIRArbitrary{Th}},
         # db_vec_xidx[bufIdx] = kernel.xIdx
         # db_vec_phi[bufIdx]  = kernel.𝜙Idx + kernel.α
         bufIdx += 1
+
         if kernel.xIdx < kernel.tapsPer𝜙
             yLower = unsafedot( pfb,  kernel.𝜙Idx, history, x, kernel.xIdx )
             yUpper = unsafedot( dpfb, kernel.𝜙Idx, history, x, kernel.xIdx )
