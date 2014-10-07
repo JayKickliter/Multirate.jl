@@ -1,6 +1,9 @@
+import Multirate: PFB, taps2pfb
+
 # Interpolator FIR kernel
-type Channelizer{T} <: FIRKernel
+type Channelizer{T}
     pfb::PFB{T}
+    h::Vector{T}
     Nchannels::Int
     tapsPer𝜙::Int
     history::Vector
@@ -10,53 +13,50 @@ function Channelizer( h::Vector, Nchannels::Integer )
     pfb       = taps2pfb( h, Nchannels )
     Nchannels = size( pfb )[2]
     tapsPer𝜙  = size( pfb )[1]
-    Channelizer( pfb, Nchannels, tapsPer𝜙, [] )
+    Channelizer( pfb, h, Nchannels, tapsPer𝜙, [] )
 end
 
-function Channelizer( Nchannels::Integer, tapsPer𝜙 = 10 )
+function Channelizer( Nchannels::Integer, tapsPer𝜙 = 20 )
     hLen = tapsPer𝜙 * Nchannels
-    h    = firdes( hLen, 0.45/Nchannels, kaiser ) .* Nchannels
+    h    = firdes( hLen, 0.5/Nchannels, kaiser ) .* Nchannels
     Channelizer( h, Nchannels )
 end
 
 
 
 function filt!{Tb,Th,Tx}( buffer::Matrix{Tb}, kernel::Channelizer{Th}, x::Vector{Tx} )
-    xLen                = length( x )
-    (bufLen,bufWidth)   = size( buffer )
-    fftBuffer           = Array( Tb, kernel.Nchannels )
+    Nchannels         = kernel.Nchannels
+    pfb               = kernel.pfb
+    tapsPer𝜙          = kernel.tapsPer𝜙
+    xLen              = length( x )
+    (bufLen,bufWidth) = size( buffer )
+    fftBuffer         = Array( Tb, Nchannels )
+    xPartitioned      = flipud(fliplr(taps2pfb(x, Nchannels)))
 
-    @assert xLen % kernel.Nchannels == 0
-    @assert bufLen * bufWidth       == xLen
+    @assert xLen   % Nchannels == 0
+    @assert bufLen * bufWidth  == xLen
     
-    if kernel.history == []
-        kernel.history = Array(Vector, kernel.Nchannels)
-        for channel in 1:kernel.Nchannels
-            kernel.history[channel] = zeros(Tx, kernel.tapsPer𝜙-1)
-        end
-    end
+    𝜙Idx         = Nchannels
+    xIdx         = 1
+    rowIdx       = 1
     
-    # TODO: splitup x similar to polyize
+    while xIdx <= bufLen
+        x       = xPartitioned[:,𝜙Idx]
+        history = zeros(Tx, tapsPer𝜙-1)
 
-    𝜙Idx   = kernel.Nchannels
-    xIdx   = 1
-    rowIdx = 1
-    while xIdx <= xLen
-
-        if xIdx < kernel.tapsPer𝜙
-            history = kernel.history[𝜙Idx]
-            fftBuffer[𝜙Idx] = unsafedot( kernel.pfb, 𝜙Idx, history, x, xIdx )
+        if xIdx < tapsPer𝜙                        
+            fftBuffer[𝜙Idx] = unsafedot( pfb, 𝜙Idx, history, x, xIdx )
         else
-            fftBuffer[𝜙Idx] = unsafedot( kernel.pfb, 𝜙Idx, x, xIdx )
+            fftBuffer[𝜙Idx] = unsafedot( pfb, 𝜙Idx, x, xIdx )
         end
         
-        xIdx += 1
         𝜙Idx -= 1
         
         if 𝜙Idx == 0
-            buffer[rowIdx,:] = flipud(fft(fftBuffer))
-            𝜙Idx             = kernel.Nchannels
+            buffer[rowIdx,:] = fft(fftBuffer)
+            𝜙Idx             = Nchannels
             rowIdx          += 1
+            xIdx            += 1
         end        
     end
     
