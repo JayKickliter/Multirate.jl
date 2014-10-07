@@ -18,7 +18,7 @@ end
 
 function Channelizer( Nchannels::Integer, tapsPer𝜙 = 20 )
     hLen = tapsPer𝜙 * Nchannels
-    h    = firdes( hLen, 0.5/Nchannels, kaiser ) .* Nchannels
+    h    = firdes( hLen, 0.45/Nchannels, kaiser ) .* Nchannels
     Channelizer( h, Nchannels )
 end
 
