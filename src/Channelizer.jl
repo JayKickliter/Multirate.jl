@@ -53,7 +53,7 @@ function filt!{Tb,Th,Tx}( buffer::Matrix{Tb}, kernel::Channelizer{Th}, x::Vector
         𝜙Idx -= 1
         
         if 𝜙Idx == 0
-            buffer[rowIdx,:] = fft(fftBuffer)
+            buffer[rowIdx,:] = fftshift(ifft(fftBuffer))
             𝜙Idx             = Nchannels
             rowIdx          += 1
             xIdx            += 1
