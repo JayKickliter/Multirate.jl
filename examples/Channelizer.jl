@@ -1,37 +1,37 @@
 using Multirate
+import Radio: wgn
+using GtkInteract
 using Winston
 
-powerspectrum( x::Vector ) = 10*log10(fftshift(abs2(fft( x ))))
+function powerspectrum( x::Vector )
+    x .*= hanning(length(x))
+    10*log10(fftshift(abs2(fft( x ))))
+end
 
-Nchannels         = 4
-Nsignals          = 1
-samplesPerChannel = 128
-channelizer       = Channelizer( Nchannels )
+Tx = Complex128
 
-signalFreqs      = rand( Nsignals )-0.5
-signalAmplitudes = rand( Nsignals )
-compositeSignal  = zeros( Complex64, Nchannels*samplesPerChannel )
+@manipulate for ƒ in -0.5:0.05:0.5, Nchannels in [2,4,8], samplesPerChannel in [128,256,512,1024]#, out = :plot
 
-for t in 0:length(compositeSignal)-1
-    for signalIdx in 1:Nsignals
-        ƒ = signalFreqs[signalIdx]
-        A = signalAmplitudes[signalIdx]
-        compositeSignal[t+1] += A*exp(im*2*pi*ƒ*t)
+    signal             = Tx[ complex(cos(2*pi*ƒ*t),sin(2*pi*ƒ*t)) for t in 0:Nchannels*samplesPerChannel-1 ]
+    signal            += wgn(length(signal), 0.1) 
+
+    channelizer        = Channelizer( Nchannels )
+    channelizedSignals = filt( channelizer, signal )
+
+    signalSpectrum     = powerspectrum( signal )
+    table              = Table(2,1)
+    p                  = plot( linspace(-0.5,0.5,length(signalSpectrum)), signalSpectrum )
+    table[1,1]         = p; ylim(0,50)    
+    subTable           = Table(1,Nchannels)
+
+    for channel in 1:Nchannels
+        spectrum            = powerspectrum( channelizedSignals[:,channel] )
+        p                   = plot( spectrum ); ylim(0,50)        
+        subTable[1,channel] = p
     end
+
+    table[2,1] = subTable
+    display(table)
+    
+    # push!(out, table)
 end
-
-channelizedSignals = filt( channelizer, compositeSignal )
-compositeSpectrum  = powerspectrum( compositeSignal )
-
-mainTable      = Table(2,1)
-mainTable[1,1] = plot( linspace(-0.5,0.5,length(compositeSpectrum)), compositeSpectrum )
-subTable       = Table(1,Nchannels)
-
-for channel in 1:Nchannels
-    spectrum            = powerspectrum( channelizedSignals[:,channel] )
-    subTable[1,channel] = plot( linspace(-0.5,0.5,length(spectrum)), spectrum )
-end
-
-mainTable[2,1] = subTable
-
-display( mainTable )
